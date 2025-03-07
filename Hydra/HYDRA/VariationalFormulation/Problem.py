@@ -300,7 +300,7 @@ class Problem:
             use_shock_capturing : bool
                 Activer la capture de choc (défaut: True)
             shock_sensor_type : str
-                Type de capteur de choc ('ducros', 'jameson', ou 'none') (défaut: 'ducros')
+                Type de capteur de choc ('ducros', ou 'none') (défaut: 'ducros')
             shock_threshold : float
                 Seuil pour le capteur de Ducros (défaut: 0.95)
             shock_viscosity_coeff : float
@@ -325,11 +325,8 @@ class Problem:
         # Initialiser le capteur de choc approprié
         if self.use_shock_capturing:
             if self.shock_sensor_type.lower() == "ducros":
-                from .ducros import DucrosSensor
+                from ..ConstitutiveLaw.shock_sensor import DucrosSensor
                 self.shock_sensor = DucrosSensor(self, threshold=self.shock_threshold)
-            elif self.shock_sensor_type.lower() == "jameson":
-                from .ducros import JamesonSensor
-                self.shock_sensor = JamesonSensor(self)
             else:
                 self.shock_sensor = None
                 

@@ -5,7 +5,7 @@ Created on Mon Jan 27 18:22:27 2025
 """
 from .Problem import Problem, BoundaryConditions
 from ..utils.generic_functions import euler_eigenvalues_2D,  max_abs_of_sequence
-from ufl import outer, grad, Identity, inner, dot, div
+from ufl import outer, grad, Identity, inner, dot, div, dev, sym
 from ufl import MixedFunctionSpace, TestFunctions, TrialFunctions
 from petsc4py.PETSc import ScalarType
 from dolfinx.fem import functionspace, Function
@@ -113,8 +113,7 @@ class CompressibleEuler(Problem):
         
         Parameters
         ----------
-        U : Liste de fonctions [ρ, ρu, ρE]
-            Variables conservatives à l'instant présent.
+        U : Liste de fonctions [ρ, ρu, ρE] Variables conservatives.
             
         Returns
         -------
@@ -132,8 +131,8 @@ class CompressibleEuler(Problem):
         # Flux visqueux pour la quantité de mouvement (pseudo viscosité)
         # Cette forme assure que la viscosité artificielle dissipe l'énergie cinétique
         # tout en préservant la conservation de la masse
-        velocity_gradient = grad(u)
-        flux_mom = -self.mu_art * (rho * (velocity_gradient + velocity_gradient.T) - (2/3) * rho * div(u) * Identity(self.tdim))
+        D = sym(grad(u))
+        flux_mom = -self.mu_art * rho * dev(D)
         
         # Flux visqueux pour l'énergie (diffusion thermique artificielle)
         flux_energy = -self.mu_art * grad(E)
@@ -146,8 +145,7 @@ class CompressibleEuler(Problem):
         
         Parameters
         ----------
-        U : Liste de fonctions [ρ, ρu, ρE]
-            Variables conservatives à l'instant présent.
+        U : Liste de fonctions [ρ, ρu, ρE] Variables conservatives.
             
         Returns
         -------
@@ -165,8 +163,7 @@ class CompressibleEuler(Problem):
         
         Parameters
         ----------
-        U : Liste de fonctions [ρ, ρu, ρE]
-            ρ = densité, u = vitesse, E = énergie totale
+        U : Liste de fonctions [ρ, ρu, ρE] ρ = densité, u = vitesse, E = énergie totale
             
         Returns
         -------

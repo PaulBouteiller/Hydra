@@ -7,10 +7,10 @@ from ..ConstitutiveLaw.eos import EOS
 from ..utils.default_parameters import default_fem_parameters
 
 from numpy import (hstack, argsort, finfo, full_like, arange, int32, unique, 
-                    tile, repeat, vstack, sort, full)
+                    tile, repeat, vstack, sort, full, zeros, array)
 
 from dolfinx.fem import (compute_integration_domains, dirichletbc, locate_dofs_topological,
-                          IntegralType, Constant, Expression, Function)
+                          IntegralType, Constant, Expression, Function, functionspace)
 from dolfinx.mesh import locate_entities_boundary, meshtags, create_submesh
 from ufl import (Measure, inner, FacetNormal)
 
@@ -289,3 +289,80 @@ class Problem:
     
     def update_bcs(self, num_pas):
         pass
+    
+    def set_stabilization_parameters(self, **kwargs):
+        """
+        Initialise les paramètres pour la stabilisation par viscosité artificielle.
+        
+        Parameters
+        ----------
+        **kwargs : Dictionnaire de paramètres optionnels
+            use_shock_capturing : bool
+                Activer la capture de choc (défaut: True)
+            shock_sensor_type : str
+                Type de capteur de choc ('ducros', 'jameson', ou 'none') (défaut: 'ducros')
+            shock_threshold : float
+                Seuil pour le capteur de Ducros (défaut: 0.95)
+            shock_viscosity_coeff : float
+                Coefficient pour la viscosité artificielle (défaut: 0.5)
+            linear_coeff : float
+                Coefficient pour le terme linéaire de la viscosité artificielle (défaut: 0.5)
+            quad_coeff : float
+                Coefficient pour le terme quadratique de la viscosité artificielle (défaut: 0.25)
+        """
+        # Paramètres pour la viscosité artificielle
+        self.use_shock_capturing = kwargs.get("use_shock_capturing", True)
+        self.shock_sensor_type = kwargs.get("shock_sensor_type", "ducros")
+        self.shock_threshold = kwargs.get("shock_threshold", 0.95)
+        self.shock_viscosity_coeff = kwargs.get("shock_viscosity_coeff", 0.5)
+        self.linear_coeff = kwargs.get("linear_coeff", 0.5)
+        self.quad_coeff = kwargs.get("quad_coeff", 0.25)
+        
+        # Créer l'espace fonctionnel pour la viscosité artificielle
+        self.V_art = functionspace(self.mesh, ("DG", self.deg))
+        self.mu_art = Function(self.V_art, name="ArtificialViscosity")
+        
+        # Initialiser le capteur de choc approprié
+        if self.use_shock_capturing:
+            if self.shock_sensor_type.lower() == "ducros":
+                from .ducros import DucrosSensor
+                self.shock_sensor = DucrosSensor(self, threshold=self.shock_threshold)
+            elif self.shock_sensor_type.lower() == "jameson":
+                from .ducros import JamesonSensor
+                self.shock_sensor = JamesonSensor(self)
+            else:
+                self.shock_sensor = None
+                
+    def calculate_mesh_size(self):
+        """
+        Calcule la taille locale des éléments du maillage.
+        
+        Returns
+        -------
+        Function
+            Fonction contenant la taille locale des éléments.
+        """
+        V = functionspace(self.mesh, ("DG", 0))
+        h_loc = Function(V, name="MeshSize")                
+        
+        # Calculer la taille locale des éléments
+        tdim = self.tdim
+        num_cells = self.mesh.topology.index_map(tdim).size_local
+        h_local = zeros(num_cells)
+        
+        for i in range(num_cells):
+            h_local[i] = self.mesh.h(tdim, array([i]))
+        
+        h_loc.x.array[:] = h_local
+        return h_loc
+    
+    def update_shock_capturing(self):
+        """
+        Met à jour la viscosité artificielle basée sur l'indicateur de choc.
+        Cette méthode doit être appelée à chaque pas de temps.
+        """
+        if self.use_shock_capturing:
+            # Calculer l'indicateur de choc et la viscosité artificielle
+            self.shock_sensor.compute_sensor_function()
+            mu_shock = self.shock_sensor.apply_shock_capturing(self.shock_viscosity_coeff)
+            self.mu_art.x.array[:] = mu_shock.x.array

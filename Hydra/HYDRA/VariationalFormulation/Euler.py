@@ -5,7 +5,7 @@ Created on Mon Jan 27 18:22:27 2025
 """
 from .Problem import Problem, BoundaryConditions
 from ..utils.generic_functions import euler_eigenvalues_2D,  max_abs_of_sequence
-from ufl import outer, grad, Identity, inner, dot
+from ufl import outer, grad, Identity, inner, dot, div
 from ufl import MixedFunctionSpace, TestFunctions, TrialFunctions
 from petsc4py.PETSc import ScalarType
 from dolfinx.fem import functionspace, Function
@@ -104,6 +104,60 @@ class CompressibleEuler(Problem):
         else:
             self.du_list = self.dU + self.dUbar
             self.u_test_list = self.U_test + self.Ubar_test
+            
+
+    def viscous_flux(self, U):
+        """
+        Calcule le flux visqueux basé sur la viscosité artificielle.
+        Ce flux est utilisé pour stabiliser les régions de choc.
+        
+        Parameters
+        ----------
+        U : Liste de fonctions [ρ, ρu, ρE]
+            Variables conservatives à l'instant présent.
+            
+        Returns
+        -------
+        Liste des flux visqueux pour [ρ, ρu, ρE]
+        """
+        if not self.use_shock_capturing:
+            return [0, 0, 0]
+        
+        # Calculer les gradients des variables conservatives
+        rho, u, E = U[0], U[1]/U[0], U[2]/U[0]
+        
+        # Flux visqueux pour la densité
+        flux_rho = -self.mu_art * grad(rho)
+        
+        # Flux visqueux pour la quantité de mouvement (pseudo viscosité)
+        # Cette forme assure que la viscosité artificielle dissipe l'énergie cinétique
+        # tout en préservant la conservation de la masse
+        velocity_gradient = grad(u)
+        flux_mom = -self.mu_art * (rho * (velocity_gradient + velocity_gradient.T) - (2/3) * rho * div(u) * Identity(self.tdim))
+        
+        # Flux visqueux pour l'énergie (diffusion thermique artificielle)
+        flux_energy = -self.mu_art * grad(E)
+        
+        return [flux_rho, flux_mom, flux_energy]
+    
+    def flux(self, U):
+        """
+        Calcule la somme des flux inviscides et visqueux.
+        
+        Parameters
+        ----------
+        U : Liste de fonctions [ρ, ρu, ρE]
+            Variables conservatives à l'instant présent.
+            
+        Returns
+        -------
+        Liste des flux totaux pour [ρ, ρu, ρE]
+        """
+        inviscid_flux = self.inviscid_flux(U)
+        viscous_flux = self.viscous_flux(U)
+        return [inv + visc for inv, visc in zip(inviscid_flux, viscous_flux)]
+
+
     
     def inviscid_flux(self, U):
         """
@@ -207,8 +261,8 @@ class CompressibleEuler(Problem):
         """
         Initialise le résidu total
         """
-        U_flux = self.inviscid_flux(self.U)
-        Ubar_flux = self.inviscid_flux(self.Ubar)
+        U_flux = self.flux(self.U)
+        Ubar_flux = self.flux(self.Ubar)
         vol_res = self.set_volume_residual(U_flux)
         surf_res = self.total_surface_residual(U_flux, Ubar_flux)
         boundary_res = self.bc_class.boundary_residual

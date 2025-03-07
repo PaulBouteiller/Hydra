@@ -4,7 +4,7 @@ Created on Fri Mar 11 09:36:05 2022
 @author: bouteillerp
 """
 from ..ConstitutiveLaw.eos import EOS
-from ..utils.default_parameters import default_damping_parameters, default_fem_parameters
+from ..utils.default_parameters import default_fem_parameters
 
 from numpy import (hstack, argsort, finfo, full_like, arange, int32, unique, 
                     tile, repeat, vstack, sort, full)
@@ -17,12 +17,7 @@ from ufl import (Measure, inner, FacetNormal)
 from mpi4py import MPI
 from dolfinx.cpp.mesh import cell_num_entities
 from petsc4py.PETSc import ScalarType
-try:
-    from CharonX.utils.MyExpression import MyConstant
-except:
-    from .utils.MyExpression import MyConstant
-
-
+from ..utils.MyExpression import MyConstant
 
 class BoundaryConditions:
     def __init__(self, U, Ubar, Ubar_test, facet_mesh, S, n, ds, tdim, entity_maps, facet_tag):
@@ -33,7 +28,6 @@ class BoundaryConditions:
         self.boundary_residual = Constant(facet_mesh, ScalarType(0)) * Ubar_test[0] * ds
         self.mcl = []
         
-        # Nouveaux attributs pour la gestion des conditions de Dirichlet
         self.tdim = tdim
         self.facet_mesh = facet_mesh
         self.entity_maps = entity_maps

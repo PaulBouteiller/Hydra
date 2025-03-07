@@ -107,13 +107,16 @@ class CompressibleEuler(Problem):
     
     def inviscid_flux(self, U):
         """
-        Défini les flux non visqueux
+        Définit les flux non visqueux pour les équations d'Euler
+        
         Parameters
         ----------
-        U : Vecteur état (ρ, ρu, ρE)
+        U : Liste de fonctions [ρ, ρu, ρE]
+            ρ = densité, u = vitesse, E = énergie totale
+            
         Returns
         -------
-        list Liste des flux non visqueux
+        Liste des flux: [flux de masse, flux de quantité de mouvement, flux d'énergie]
         """
         rho, u, E = U[0], U[1]/U[0], U[2]/U[0]
         p = self.EOS.set_eos(rho, u, E, self.material)

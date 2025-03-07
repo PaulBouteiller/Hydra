@@ -8,7 +8,7 @@ from ufl import outer, grad, Identity, inner, dot
 from dolfinx.fem import functionspace, Function
 from ufl import MixedFunctionSpace, TestFunctions, TrialFunctions, curl, cross
 
-class CompressibleMHDEuler(CompressibleMHDEuler):
+class CompressibleGLMMHDEuler(CompressibleMHDEuler):
     def set_function_space(self):  
         """
         Initialise les espaces fonctionnels

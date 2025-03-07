@@ -80,15 +80,8 @@ class CompressibleNavierStokes(CompressibleEuler):
         return vol_form + surf_form
 
     def set_form(self):
-        """
-        Initialise le résidu
-        """
-        U_flux = self.flux(self.U)
-        Ubar_flux = self.flux(self.Ubar)
-        vol_res = self.set_volume_residual(U_flux)
-        surf_res = self.total_surface_residual(U_flux, Ubar_flux)
-        boundary_res = self.bc_class.boundary_residual
-        gradient_res = self.gradient_residual()
-        self.residual = vol_res + surf_res + boundary_res + gradient_res
-        if self.analysis == "dynamic":
-            self.residual += self.set_dynamic_residual()
+        """Initialise le résidu en réutilisant la logique de la classe parente"""
+        # Appeler la version d'Euler pour la partie commune
+        super().set_form()
+        # Ajouter le terme de gradient spécifique à Navier-Stokes
+        self.residual += self.gradient_residual()

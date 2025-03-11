@@ -65,6 +65,8 @@ class BoundaryConditions:
         self.bcs.append(dirichletbc(bc_value(value), dofs, current_space(space, isub)))
     
     def pressure_residual(self, value, tag):
+        #ToDo en fait ce n'est pas ça du tout qu'il faut faire, il faut pénaliser la 
+        # différence entre le flux numérique et un flux de Neumann voir équation (2.14) du poly HDG
         if isinstance(value, MyConstant):
             p = value.Expression.constant
             self.mcl.append(value.Expression)
@@ -127,6 +129,7 @@ class Problem:
         self.set_functions()
         self.set_variable_to_solve()
         self.set_test_functions()
+        self.set_stabilization_parameters(**kwargs)
 
             
         # Constitutive Law
@@ -297,26 +300,16 @@ class Problem:
         Parameters
         ----------
         **kwargs : Dictionnaire de paramètres optionnels
-            use_shock_capturing : bool
-                Activer la capture de choc (défaut: True)
-            shock_sensor_type : str
-                Type de capteur de choc ('ducros', ou 'none') (défaut: 'ducros')
-            shock_threshold : float
-                Seuil pour le capteur de Ducros (défaut: 0.95)
-            shock_viscosity_coeff : float
-                Coefficient pour la viscosité artificielle (défaut: 0.5)
-            linear_coeff : float
-                Coefficient pour le terme linéaire de la viscosité artificielle (défaut: 0.5)
-            quad_coeff : float
-                Coefficient pour le terme quadratique de la viscosité artificielle (défaut: 0.25)
+            use_shock_capturing : bool Activer la capture de choc (défaut: True)
+            shock_sensor_type : str Type de capteur de choc ('ducros', ou 'none') (défaut: 'ducros')
+            shock_threshold : float Seuil pour le capteur de Ducros (défaut: 0.95)
+            shock_viscosity_coeff : float Coefficient pour la viscosité artificielle (défaut: 0.5)
         """
         # Paramètres pour la viscosité artificielle
         self.use_shock_capturing = kwargs.get("use_shock_capturing", True)
         self.shock_sensor_type = kwargs.get("shock_sensor_type", "ducros")
         self.shock_threshold = kwargs.get("shock_threshold", 0.95)
         self.shock_viscosity_coeff = kwargs.get("shock_viscosity_coeff", 0.5)
-        self.linear_coeff = kwargs.get("linear_coeff", 0.5)
-        self.quad_coeff = kwargs.get("quad_coeff", 0.25)
         
         # Créer l'espace fonctionnel pour la viscosité artificielle
         self.V_art = functionspace(self.mesh, ("DG", self.deg))
@@ -325,8 +318,8 @@ class Problem:
         # Initialiser le capteur de choc approprié
         if self.use_shock_capturing:
             if self.shock_sensor_type.lower() == "ducros":
-                from ..ConstitutiveLaw.shock_sensor import DucrosSensor
-                self.shock_sensor = DucrosSensor(self, threshold=self.shock_threshold)
+                from ..VariationalFormulation.shock_sensor import DucrosShockSensor
+                self.shock_sensor = DucrosShockSensor(self, threshold=self.shock_threshold)
             else:
                 self.shock_sensor = None
                 
@@ -359,7 +352,6 @@ class Problem:
         Cette méthode doit être appelée à chaque pas de temps.
         """
         if self.use_shock_capturing:
-            # Calculer l'indicateur de choc et la viscosité artificielle
             self.shock_sensor.compute_sensor_function()
             mu_shock = self.shock_sensor.apply_shock_capturing(self.shock_viscosity_coeff)
             self.mu_art.x.array[:] = mu_shock.x.array

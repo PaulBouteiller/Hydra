@@ -104,73 +104,24 @@ class CompressibleEuler(Problem):
         else:
             self.du_list = self.dU + self.dUbar
             self.u_test_list = self.U_test + self.Ubar_test
-            
 
-    def viscous_flux(self, U):
-        """
-        Calcule le flux visqueux basé sur la viscosité artificielle.
-        Ce flux est utilisé pour stabiliser les régions de choc.
-        
-        Parameters
-        ----------
-        U : Liste de fonctions [ρ, ρu, ρE] Variables conservatives.
-            
-        Returns
-        -------
-        Liste des flux visqueux pour [ρ, ρu, ρE]
-        """
-        if not self.use_shock_capturing:
-            return [0, 0, 0]
-        
-        # Calculer les gradients des variables conservatives
-        rho, u, E = U[0], U[1]/U[0], U[2]/U[0]
-        
-        # Flux visqueux pour la densité
-        flux_rho = -self.mu_art * grad(rho)
-        
-        # Flux visqueux pour la quantité de mouvement (pseudo viscosité)
-        # Cette forme assure que la viscosité artificielle dissipe l'énergie cinétique
-        # tout en préservant la conservation de la masse
-        D = sym(grad(u))
-        flux_mom = -self.mu_art * rho * dev(D)
-        
-        # Flux visqueux pour l'énergie (diffusion thermique artificielle)
-        flux_energy = -self.mu_art * grad(E)
-        
-        return [flux_rho, flux_mom, flux_energy]
-    
-    def flux(self, U):
-        """
-        Calcule la somme des flux inviscides et visqueux.
-        
-        Parameters
-        ----------
-        U : Liste de fonctions [ρ, ρu, ρE] Variables conservatives.
-            
-        Returns
-        -------
-        Liste des flux totaux pour [ρ, ρu, ρE]
-        """
-        inviscid_flux = self.inviscid_flux(U)
-        viscous_flux = self.viscous_flux(U)
-        return [inv + visc for inv, visc in zip(inviscid_flux, viscous_flux)]
-
-
-    
     def inviscid_flux(self, U):
         """
         Définit les flux non visqueux pour les équations d'Euler
-        
         Parameters
         ----------
         U : Liste de fonctions [ρ, ρu, ρE] ρ = densité, u = vitesse, E = énergie totale
-            
         Returns
         -------
         Liste des flux: [flux de masse, flux de quantité de mouvement, flux d'énergie]
         """
         rho, u, E = U[0], U[1]/U[0], U[2]/U[0]
         p = self.EOS.set_eos(rho, u, E, self.material)
+        if self.use_shock_capturing:
+            h = self.calculate_mesh_size()
+            c = self.material.celerity
+            p_star = 1.5e-3 * rho * h / self.deg * (inner(u, u) + c)**0.5 * self.shock_sensor.shock_indicator * div(u) 
+            p+= p_star
         return [self.mass_flux(U),
                 self.momentum_flux(rho, u, p),
                 self.energy_flux(U, p)]
@@ -195,29 +146,45 @@ class CompressibleEuler(Problem):
     def set_volume_residual(self, U_flux):
         """Renvoie le résidu volumique"""
         return -sum(inner(flux, grad(test_func)) * self.dx_c 
-                    for flux, test_func in zip(U_flux, self.U_test))
-    
-    def set_numerical_flux(self, U_flux, Ubar_flux, flux_type = "Cockburn"):
+                    for flux, test_func in zip(U_flux, self.U_test))        
+        
+    def set_numerical_flux(self, U_flux, Ubar_flux, flux_type="Cockburn"):
         """
         Calcule le flux numérique associé à chacune des équations de conservations
-
+    
         Parameters
         ----------
         U_flux : Flux associés aux variables U dans l'élément
         Ubar_flux : Flux associés aux variables Ubar au bord de l'élément
-        flux_type : string, optional le type de flux numérique. The default is "Cockburn".
-
+        flux_type : string, optional le type de flux numérique.
+                    Options: "Cockburn", "LF", "Rusanov", "HLL", "HLLC"
+    
         Returns
         -------
         list la liste des flux numériques
-
         """
         if flux_type == "Cockburn":
             return [dot(flux_bar, self.n) + self.S * (x - x_bar) 
                     for flux_bar, x, x_bar in zip(Ubar_flux, self.U, self.Ubar)]
         elif flux_type == "LF":
+            #Doit être redondant avec Rusanov
             return [dot(1./2 * (flux_bar + flux), self.n) + self.S * (x - x_bar) 
                     for flux_bar, flux, x, x_bar in zip(Ubar_flux, U_flux, self.U, self.Ubar)]
+        elif flux_type == "Rusanov":
+            from .riemann_solvers import RiemannSolvers
+            riemann = RiemannSolvers(self.EOS, self.material)
+            return riemann.rusanov_flux(self.U, self.Ubar, U_flux, Ubar_flux, self.n)
+        elif flux_type == "HLL":
+            from .riemann_solvers import RiemannSolvers
+            riemann = RiemannSolvers(self.EOS, self.material)
+            return riemann.hll_flux(self.U, self.Ubar, U_flux, Ubar_flux, self.n)
+        elif flux_type == "HLLC":
+            raise ValueError("Currently buggued")
+            from .riemann_solvers import RiemannSolvers
+            riemann = RiemannSolvers(self.EOS, self.material)
+            return riemann.hllc_flux(self.U, self.Ubar, U_flux, Ubar_flux, self.n)
+        else:
+            raise ValueError("Flux numérique inconnu")
     
     def numerical_flux_continuity_residual(self, flux_num):
         """
@@ -258,8 +225,8 @@ class CompressibleEuler(Problem):
         """
         Initialise le résidu total
         """
-        U_flux = self.flux(self.U)
-        Ubar_flux = self.flux(self.Ubar)
+        U_flux = self.inviscid_flux(self.U)
+        Ubar_flux = self.inviscid_flux(self.Ubar)
         vol_res = self.set_volume_residual(U_flux)
         surf_res = self.total_surface_residual(U_flux, Ubar_flux)
         boundary_res = self.bc_class.boundary_residual

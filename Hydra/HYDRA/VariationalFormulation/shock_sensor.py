@@ -4,9 +4,9 @@ Created on Fri Mar  7 11:10:20 2025
 @author: bouteillerp
 """
 
-from ufl import div, curl, sqrt, conditional, ge, abs, inner
-from dolfinx.fem import Function, functionspace
-import numpy as np
+from ufl import div, curl, sqrt, conditional, ge, inner
+from dolfinx.fem import Function, functionspace, Expression
+from numpy import all
 
 class ShockSensor:
     """
@@ -26,10 +26,7 @@ class ShockSensor:
         self.mesh = problem.mesh
         self.tdim = problem.tdim
         
-        # Seuil pour éviter la division par zéro
         self.epsilon = 1e-10
-        
-        # Créer l'espace pour stocker l'indicateur de choc
         self.V_shock = functionspace(self.mesh, ("DG", problem.deg))
         self.shock_indicator = Function(self.V_shock, name="ShockIndicator")
         
@@ -66,13 +63,35 @@ class DucrosShockSensor(ShockSensor):
         
         Parameters
         ----------
-        problem : Objet de la classe Problem
-            Le problème pour lequel le capteur de choc est défini.
-        threshold : float, optional
-            Le seuil au-delà duquel un choc est détecté. La valeur par défaut est 0.95.
+        problem : Objet de la classe Problem Le problème pour lequel le capteur de choc est défini.
+        threshold : float, optional Le seuil au-delà duquel un choc est détecté. La valeur par défaut est 0.95.
         """
         super().__init__(problem)
         self.threshold = threshold
+        self.set_sensor_function()
+    
+    def set_sensor_function(self):
+        """
+        Calcule l'indicateur de choc de Ducros.
+        
+        Returns
+        -------
+        Function L'indicateur de choc (1 où des chocs sont détectés, 0 ailleurs).
+        """
+        u = self.problem.u
+        velocity_div = div(u)
+        velocity_curl = curl(u)
+        
+        # Calculer la norme du rotationnel (le curl en 3D est un vecteur)
+        # curl_norm = sqrt(inner(velocity_curl, velocity_curl)) if self.tdim == 3 else abs(velocity_curl)
+        curl_norm = sqrt(inner(velocity_curl, velocity_curl))
+        s_vort = abs(velocity_div) / (abs(velocity_div) + curl_norm + self.epsilon)
+        h = self.problem.calculate_mesh_size()
+        c = self.problem.material.celerity
+        s_div = -h * velocity_div / (self.problem.deg * c)
+        hat_s = s_div *  s_vort
+        self.sensor_expr = Expression(conditional(ge(hat_s, self.threshold), 1.0, 0.0), self.V_shock.element.interpolation_points())
+        self.shock_indicator.interpolate(self.sensor_expr)
     
     def compute_sensor_function(self):
         """
@@ -82,47 +101,27 @@ class DucrosShockSensor(ShockSensor):
         -------
         Function L'indicateur de choc (1 où des chocs sont détectés, 0 ailleurs).
         """
-        # Obtenir le champ de vitesse du problème
-        u = self.problem.u
-        # Calculer la divergence et le rotationnel du champ de vitesse
-        velocity_div = div(u)
-        velocity_curl = curl(u)
-        
-        # Calculer la norme du rotationnel (le curl en 3D est un vecteur)
-        curl_norm = sqrt(inner(velocity_curl, velocity_curl)) if self.tdim == 3 else abs(velocity_curl)
-        
-        # Calculer l'indicateur de choc de Ducros
-        sensor_expr = conditional(
-            ge(abs(velocity_div) / (abs(velocity_div) + curl_norm + self.epsilon), self.threshold),
-            1.0, 0.0
-        )
-        
-        # Mettre à jour l'indicateur de choc
-        self.shock_indicator.interpolate(sensor_expr)
-        
-        return self.shock_indicator
+        self.shock_indicator.interpolate(self.sensor_expr)
     
-    def apply_shock_capturing(self, mu_artificial=1.0):
-        """
-        Applique une viscosité artificielle basée sur l'indicateur de choc.
+    # def apply_shock_capturing(self, mu_artificial=1.0):
+    #     """
+    #     Applique une viscosité artificielle basée sur l'indicateur de choc.
         
-        Parameters
-        ----------
-        mu_artificial : float, optional
-            Coefficient de viscosité artificielle. La valeur par défaut est 1.0.
+    #     Parameters
+    #     ----------
+    #     mu_artificial : float, optional Coefficient de viscosité artificielle. La valeur par défaut est 1.0.
         
-        Returns
-        -------
-        Function La viscosité artificielle à utiliser dans le schéma numérique.
-        """
-        mu_shock = Function(self.V_shock, name="ShockViscosity")
+    #     Returns
+    #     -------
+    #     Function La viscosité artificielle à utiliser dans le schéma numérique.
+    #     """
+    #     mu_shock = Function(self.V_shock, name="ShockViscosity")
         
-        # Calculer l'indicateur de choc si ce n'est pas déjà fait
-        if np.all(self.shock_indicator.x.array == 0):
-            self.compute_sensor_function()
+    #     # Calculer l'indicateur de choc si ce n'est pas déjà fait
+    #     if all(self.shock_indicator.x.array == 0):
+    #         self.compute_sensor_function()
         
-        # Définir la viscosité artificielle en fonction de l'indicateur de choc
-        # mu_shock = mu_artificial * shock_indicator
-        mu_shock.x.array[:] = mu_artificial * self.shock_indicator.x.array
+    #     # Définir la viscosité artificielle en fonction de l'indicateur de choc
+    #     mu_shock.x.array[:] = mu_artificial * self.shock_indicator.x.array
         
-        return mu_shock
+    #     return mu_shock

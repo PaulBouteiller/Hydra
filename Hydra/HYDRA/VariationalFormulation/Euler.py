@@ -123,10 +123,8 @@ class CompressibleEuler(Problem):
         rho, u, E = U[0], U[1]/U[0], U[2]/U[0]
         p = self.EOS.set_eos(rho, u, E, self.material)
         if self.use_shock_capturing:
-            # h = self.calculate_mesh_size()
-            # c = self.material.celerity
-            # p_star = 1.5e-3 * rho * h / self.deg * (inner(u, u) + c)**0.5 * self.shock_sensor.shock_indicator * div(u) 
-            p+= self.shock_sensor.p_star
+
+            p+= self.artificial_pressure.p_star
         return [self.mass_flux(U),
                 self.momentum_flux(rho, u, p),
                 self.energy_flux(U, p)]

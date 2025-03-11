@@ -115,7 +115,7 @@ class Solve:
         for x, x_n in zip(self.pb.U_base, self.pb.Un_base):
             x_n.x.array[:] = x.x.array
             # Mettre à jour la viscosité artificielle basée sur le nouvel état
-        self.pb.shock_sensor.compute_sensor_function()
+        self.pb.artificial_pressure.compute_artificial_pressure()
         
     def update_bcs(self, num_pas):
         """

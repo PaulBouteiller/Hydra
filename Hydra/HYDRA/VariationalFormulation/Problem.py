@@ -130,6 +130,7 @@ class Problem:
         self.set_variable_to_solve()
         self.set_test_functions()
         self.set_stabilization_parameters(**kwargs)
+        self.set_artifial_pressure()
 
             
         # Constitutive Law
@@ -320,6 +321,9 @@ class Problem:
             if self.shock_sensor_type.lower() == "ducros":
                 from ..VariationalFormulation.shock_sensor import DucrosShockSensor
                 self.shock_sensor = DucrosShockSensor(self, threshold=self.shock_threshold)
+            elif self.shock_sensor_type.lower() == "fernandez":
+                from ..VariationalFormulation.shock_sensor import FernandezShockSensor
+                self.shock_sensor = FernandezShockSensor(self, threshold=self.shock_threshold)
             else:
                 self.shock_sensor = None
                 
@@ -346,12 +350,7 @@ class Problem:
         h_loc.x.array[:] = h_local
         return h_loc
     
-    def update_shock_capturing(self):
-        """
-        Met à jour la viscosité artificielle basée sur l'indicateur de choc.
-        Cette méthode doit être appelée à chaque pas de temps.
-        """
-        if self.use_shock_capturing:
-            self.shock_sensor.compute_sensor_function()
-            mu_shock = self.shock_sensor.apply_shock_capturing(self.shock_viscosity_coeff)
-            self.mu_art.x.array[:] = mu_shock.x.array
+    def set_artifial_pressure(self):
+        from ..ConstitutiveLaw.artificial_pressure import ArtificialPressure
+        h = self.calculate_mesh_size()
+        self.artificial_pressure = ArtificialPressure(self.U, self.V_rho, h, self.material.celerity, self.deg, self.shock_sensor)

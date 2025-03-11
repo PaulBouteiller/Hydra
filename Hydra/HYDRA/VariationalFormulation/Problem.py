@@ -90,11 +90,11 @@ class BoundaryConditions:
 
 class Problem:
     """
-    La classe Problem est un des éléments principal du code Charon. C'est elle qui défini
-    la formulation du problème en appelant les modèles mécaniques retenus. Les différents types 
-    d'analyses (plastique, endommageable etc..) sont précisés en insérant des mots clés lors de 
-    l'appel de cette classe. Voir la notice pour la définition des différents mots clés.
-    """
+    Classe abstraite définissant un problème de mécanique des fluides compressibles.
+    
+    Cette classe est le point central pour la définition d'un problème physique
+    à résoudre numériquement. Elle gère le maillage, les espaces fonctionnels,
+    les conditions initiales et aux limites, et la formulation variationnelle."""
     def __init__(self, material, dt, initial_mesh = None, **kwargs):
         if initial_mesh == None:
             self.mesh = self.define_mesh()

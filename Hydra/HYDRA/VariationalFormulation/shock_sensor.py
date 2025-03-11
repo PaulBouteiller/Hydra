@@ -29,6 +29,7 @@ class ShockSensor:
         self.epsilon = 1e-10
         self.V_shock = functionspace(self.mesh, ("DG", problem.deg))
         self.shock_indicator = Function(self.V_shock, name="ShockIndicator")
+        self.p_star = Function(self.V_shock, name="ShockIndicator")
         
     def compute_sensor_function(self):
         """
@@ -70,6 +71,35 @@ class DucrosShockSensor(ShockSensor):
         self.threshold = threshold
         self.set_sensor_function()
     
+    # def set_sensor_function(self):
+    #     """
+    #     Calcule l'indicateur de choc de Ducros.
+        
+    #     Returns
+    #     -------
+    #     Function L'indicateur de choc (1 où des chocs sont détectés, 0 ailleurs).
+    #     """
+    #     rho = self.problem.rho
+    #     u = self.problem.u
+    #     k = 
+    #     velocity_div = div(u)
+    #     velocity_curl = curl(u)
+        
+    #     # Calculer la norme du rotationnel (le curl en 3D est un vecteur)
+    #     # curl_norm = sqrt(inner(velocity_curl, velocity_curl)) if self.tdim == 3 else abs(velocity_curl)
+    #     curl_norm = sqrt(inner(velocity_curl, velocity_curl))
+    #     s_vort = abs(velocity_div) / (abs(velocity_div) + curl_norm + self.epsilon)
+    #     h = self.problem.calculate_mesh_size()
+    #     c = self.problem.material.celerity
+    #     s_div = -h * velocity_div / (self.problem.deg * c)
+    #     hat_s = s_div *  s_vort
+    #     self.sensor_expr = Expression(conditional(ge(hat_s, self.threshold), 1.0, 0.0), self.V_shock.element.interpolation_points())
+        
+    #     # h = self.calculate_mesh_size()
+    #     # c = self.material.celerity
+    #     p_star = 1.5e-3 * rho * h / self.deg * (inner(u, u) + c)**0.5 * self.shock_sensor.shock_indicator * div(u) 
+    #     self.shock_indicator.interpolate(self.sensor_expr)
+        
     def set_sensor_function(self):
         """
         Calcule l'indicateur de choc de Ducros.
@@ -78,7 +108,9 @@ class DucrosShockSensor(ShockSensor):
         -------
         Function L'indicateur de choc (1 où des chocs sont détectés, 0 ailleurs).
         """
+        rho = self.problem.rho
         u = self.problem.u
+        k = self.problem.deg
         velocity_div = div(u)
         velocity_curl = curl(u)
         
@@ -88,10 +120,29 @@ class DucrosShockSensor(ShockSensor):
         s_vort = abs(velocity_div) / (abs(velocity_div) + curl_norm + self.epsilon)
         h = self.problem.calculate_mesh_size()
         c = self.problem.material.celerity
-        s_div = -h * velocity_div / (self.problem.deg * c)
+        s_div = -h * velocity_div / (k * c)
         hat_s = s_div *  s_vort
-        self.sensor_expr = Expression(conditional(ge(hat_s, self.threshold), 1.0, 0.0), self.V_shock.element.interpolation_points())
-        self.shock_indicator.interpolate(self.sensor_expr)
+
+        sensor_expr = conditional(ge(hat_s, self.threshold), 1.0, 0.0)
+        # p_star = 1.5 * rho * h / k * (inner(u, u) + c)**0.5 * sensor_expr * (velocity_div - abs(velocity_div)) / 2
+        p_star = 1.5e-1 * rho * h / k * (inner(u, u) + c)**0.5 * sensor_expr * velocity_div
+        self.p_star_expr = Expression(p_star, self.V_shock.element.interpolation_points())
+        
+        # h = self.calculate_mesh_size()
+        # c = self.material.celerity
+        # p_star =  
+        
+        self.p_star.interpolate(self.p_star_expr)
+    
+    # def compute_sensor_function(self):
+    #     """
+    #     Calcule l'indicateur de choc de Ducros.
+        
+    #     Returns
+    #     -------
+    #     Function L'indicateur de choc (1 où des chocs sont détectés, 0 ailleurs).
+    #     """
+    #     self.shock_indicator.interpolate(self.sensor_expr)
     
     def compute_sensor_function(self):
         """
@@ -101,7 +152,7 @@ class DucrosShockSensor(ShockSensor):
         -------
         Function L'indicateur de choc (1 où des chocs sont détectés, 0 ailleurs).
         """
-        self.shock_indicator.interpolate(self.sensor_expr)
+        self.p_star.interpolate(self.p_star_expr)
     
     # def apply_shock_capturing(self, mu_artificial=1.0):
     #     """

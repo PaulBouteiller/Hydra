@@ -123,8 +123,8 @@ class CompressibleEuler(Problem):
         rho, u, E = U[0], U[1]/U[0], U[2]/U[0]
         p = self.EOS.set_eos(rho, u, E, self.material)
         if self.use_shock_capturing:
-
-            p+= self.artificial_pressure.p_star
+            pass
+            # p+= self.artificial_pressure.p_star
         return [self.mass_flux(U),
                 self.momentum_flux(rho, u, p),
                 self.energy_flux(U, p)]
@@ -142,8 +142,8 @@ class CompressibleEuler(Problem):
         return (U[2] + p) * U[1]/U[0]
     
     def set_dynamic_residual(self):
-        """Renvoie le résidu associé à la dynamique implicite"""
-        return sum(inner((x - x_n)/self.dt, x_test) * self.dx_c 
+        """Renvoie le résidu associé à la dynamique implicite avec facteur de temps ajustable"""
+        return sum(inner((x - x_n) * self.dt_factor, x_test) * self.dx_c 
                    for x, x_n, x_test in zip(self.U, self.U_n, self.U_test))
     
     def set_volume_residual(self, U_flux):
@@ -151,7 +151,7 @@ class CompressibleEuler(Problem):
         return -sum(inner(flux, grad(test_func)) * self.dx_c 
                     for flux, test_func in zip(U_flux, self.U_test))        
         
-    def set_numerical_flux(self, U_flux, Ubar_flux, flux_type="Cockburn"):
+    def set_numerical_flux(self, U_flux, Ubar_flux, flux_type="HLL"):
         """
         Calcule le flux numérique associé à chacune des équations de conservations
     

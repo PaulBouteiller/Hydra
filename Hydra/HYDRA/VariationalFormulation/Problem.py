@@ -113,6 +113,8 @@ class Problem:
         self.dt = dt
         self.n = FacetNormal(self.mesh)
         self.facet_mesh, self.entity_maps = self.create_facet_mesh()
+        
+        self.dt_factor = 1.0 / self.dt  # Facteur par défaut pour backward Euler
 
         # Set parameters and update from user
         self.fem_parameters()

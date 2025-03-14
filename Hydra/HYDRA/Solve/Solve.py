@@ -3,16 +3,21 @@ Created on Tue Mar  8 15:51:14 2022
 
 @author: bouteillerp
 """
-from .block import extract_rows, derivative_block
-from .export_result import ExportResults
+from ..utils.block import extract_rows, derivative_block
+from ..Export.export_result import ExportResults
 from .customblockedNewton import BlockedNewtonSolver
-from.hybrid_blocked_newton import HybridBlockedNewtonSolver
+from .hybrid_blocked_newton import HybridBlockedNewtonSolver
 from tqdm import tqdm
 from numpy import linspace
 
 class Solve:
     def __init__(self, problem, **kwargs):
         self.pb = problem
+        self.initialize_solve(problem, **kwargs)
+        print("Start solving")       
+        self.iterative_solve(**kwargs)
+        
+    def initialize_solve(self, problem, **kwargs):
         self.pb.set_initial_conditions()
         self.t = 0        
         self.export = ExportResults(problem, kwargs.get("Prefix", self.pb.prefix()), \
@@ -23,8 +28,6 @@ class Solve:
         self.num_time_steps = int(self.Tfin / self.dt)
         self.load_steps = linspace(0, self.Tfin, self.num_time_steps + 1)
         self.pb.bc_class.set_time_dependant_BCs(self.load_steps)
-        print("Start solving")       
-        self.iterative_solve(**kwargs)
         
     def set_solver(self):
         """

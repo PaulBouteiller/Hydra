@@ -202,10 +202,13 @@ class CompressibleEuler(Problem):
         # extérieures du mesh. Il faudrait enlever les facettes exterieures directement
         # des facettes du submesh si on arrivait à les faire correspondre à leur alter-ego sur le mesh.
         continuity_residual = -sum(inner(f_num, test_func) * self.ds_tot 
-                                   for f_num, test_func in zip(flux_num, self.Ubar_test))
+                                    for f_num, test_func in zip(flux_num, self.Ubar_test))
         for tag in self.flag_list:
             continuity_residual += sum(inner(f_num, test_func) * self.ds_c(tag) 
                                     for f_num, test_func in zip(flux_num, self.Ubar_test))
+            
+        # continuity_residual = -sum(inner(f_num, test_func) * self.ds_int
+        #                             for f_num, test_func in zip(flux_num, self.Ubar_test))
         return continuity_residual
 
     def surface_residual(self, flux_num):

@@ -21,7 +21,7 @@ Longueur = ratio * Largeur
 
 t_end = 6e-4
 
-dt = 6e-6
+dt = 2e-6
 num_time_steps = int(t_end/dt)
 
 class Square(CompressibleEuler):
@@ -135,4 +135,4 @@ class Square(CompressibleEuler):
     
 pb = Square(Acier)
 # Solve(pb, TFin = t_end, dt = dt)
-DIRKSolve(pb, dirk_method="SDIRK2", TFin=t_end, dt=dt)
+DIRKSolve(pb, dirk_method="ESDIRK3(2)5L[2]SA", TFin=t_end, dt=dt)

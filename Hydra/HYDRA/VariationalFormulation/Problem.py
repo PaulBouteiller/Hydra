@@ -7,17 +7,23 @@ from ..ConstitutiveLaw.eos import EOS
 from ..utils.default_parameters import default_fem_parameters
 
 from numpy import (hstack, argsort, finfo, full_like, arange, int32, unique, 
-                    tile, repeat, vstack, sort, full, zeros, array)
+                    tile, repeat, vstack, sort, full, zeros, array, delete,  setdiff1d, where)
 
 from dolfinx.fem import (compute_integration_domains, dirichletbc, locate_dofs_topological,
                           IntegralType, Constant, Expression, Function, functionspace)
-from dolfinx.mesh import locate_entities_boundary, meshtags, create_submesh
+from dolfinx.mesh import locate_entities_boundary, meshtags, create_submesh, exterior_facet_indices, locate_entities
 from ufl import (Measure, inner, FacetNormal)
 
 from mpi4py import MPI
 from dolfinx.cpp.mesh import cell_num_entities
 from petsc4py.PETSc import ScalarType
 from ..utils.MyExpression import MyConstant
+
+from dolfinx import log
+from dolfinx.cpp.log import LogLevel
+
+# Utiliser l'énumération LogLevel au lieu de logging.WARNING
+log.set_log_level(LogLevel.WARNING)
 
 class BoundaryConditions:
     def __init__(self, U, Ubar, Ubar_test, facet_mesh, S, n, ds, tdim, entity_maps, facet_tag):
@@ -113,8 +119,7 @@ class Problem:
         self.dt = dt
         self.n = FacetNormal(self.mesh)
         self.facet_mesh, self.entity_maps = self.create_facet_mesh()
-        
-        self.dt_factor = 1.0 / self.dt  # Facteur par défaut pour backward Euler
+        self.dt_factor = Constant(self.mesh, ScalarType(1.0 / self.dt))# Facteur par défaut pour backward Euler
 
         # Set parameters and update from user
         self.fem_parameters()
@@ -192,88 +197,172 @@ class Problem:
         entity_maps = {facet_mesh: msh_to_facet_mesh}
         return facet_mesh, entity_maps
         
-    def mark_boundary(self, flag_list, coord_list, localisation_list, tol = finfo(float).eps):
+    def mark_boundary(self, flag_list, coord_list, localisation_list, tol=finfo(float).eps):
         """
-        Permet le marquage simple des bords pour des pavés/maillage 1D
-
-        Parameters
-        ----------
-        flag_list : List de Int, drapeau qui vont être associés aux domaines.
-        coord_list : List de String, variable permettant de repérer les domaines.
-        localisation_list : List de Float, réel au voisinage duquel les poins de coordonnées
-                            vont être récupéré.
+        Marque directement les facettes qui correspondent aux frontières.
         """
-        facets, full_flag = self.set_facet_flags(flag_list, coord_list, localisation_list, tol)
-        marked_facets = hstack(facets)
-        marked_values = hstack(full_flag)
-        sorted_facets = argsort(marked_facets)
-        self.flag_list = unique(flag_list)#Contient les drapeaux sans les doublons
-        self.facet_tag = meshtags(self.mesh, self.fdim, marked_facets[sorted_facets], marked_values[sorted_facets])
-        
-    def set_facet_flags(self, flag_list, coord_list, localisation_list, tol):
         facets = []
         full_flag = []
-        for variable in zip(flag_list, coord_list, localisation_list):
-            def trivial_boundary(x):
-                return abs(x[self.index_coord(variable[1])] - variable[2]) < tol
-            facets.append(locate_entities_boundary(self.mesh, self.fdim, trivial_boundary))
-            full_flag.append(full_like(facets[-1], variable[0]))
-        return facets, full_flag
-        
-    def index_coord(self, coord):
-        """
-        Renvoie l'index correspondant à la variable spatiale
-        """
-        if coord == "x":
-            return 0
-        elif coord == "y":
-            return 1
-        elif coord == "z":
-            return 2
+        flags_found = []  # Pour suivre les flags qui ont effectivement trouvé des facettes
+        for flag, coord, loc in zip(flag_list, coord_list, localisation_list):
+            def boundary_condition(x):
+                def index_coord(coord):
+                    """
+                    Renvoie l'index correspondant à la variable spatiale
+                    """
+                    if coord == "x":
+                        return 0
+                    elif coord == "y":
+                        return 1
+                    elif coord == "z":
+                        return 2
+                    else:
+                        raise ValueError("Standard coordinates must be chosen")
+                return abs(x[index_coord(coord)] - loc) < tol
+            bdry_facets = locate_entities(self.facet_mesh, self.fdim, boundary_condition)
+            
+            # Vérifier si des facettes ont été trouvées pour cette condition
+            if len(bdry_facets) > 0:
+                facets.append(bdry_facets)
+                full_flag.append(full_like(bdry_facets, flag))
+                flags_found.append(flag)
+            else:
+                print(f"Attention: Aucune facette trouvée pour flag={flag}, coord={coord}, loc={loc}")
+        if len(facets) > 0:
+            marked_facets = hstack(facets)
+            marked_values = hstack(full_flag)
+            sorted_facets = argsort(marked_facets)
+            self.flag_list = unique(flags_found)  # Utiliser uniquement les flags qui ont trouvé des facettes
+            
+            # Créer les tags pour les facettes
+            self.facet_tag = meshtags(self.facet_mesh, self.facet_mesh.topology.dim, 
+                                            marked_facets[sorted_facets], 
+                                            marked_values[sorted_facets])
+            
+            # Correspondance avec le maillage principal
+            self.facet_to_mesh_tag = {}
+            for tag in self.flag_list:
+                tagged_facets = self.facet_tag.indices[self.facet_tag.values == tag]
+                # Convertir en indices dans le maillage principal
+                original_facets = array([self.entity_maps[self.facet_mesh][f] for f in tagged_facets])
+                self.facet_to_mesh_tag[tag] = original_facets
         else:
-            raise ValueError("Standard coordinates must be chosen")
-            
-    def set_measures(self):
-        """Configure les mesures d'intégration et les domaines pour une formulation HDG.
+            print("Attention: Aucune facette n'a été marquée pour aucune condition aux limites.")
+            self.flag_list = []
+            self.facet_to_mesh_tag = {}
+                
+    def compute_cell_boundary_facets(self):
+        """
+        Calcule les entités d'intégration pour les intégrales autour des
+        frontières de toutes les cellules du maillage.
         
-        Cette fonction configure les mesures nécessaires pour l'intégration volumique et surfacique
-        dans le contexte d'une méthode HDG. Elle gère à la fois
-        les intégrations sur le volume des éléments et sur leurs facettes, en tenant compte des
-        conditions aux limites.
-        
-        Parameters
-        ----------
-        msh : dolfinx.mesh.Mesh Le maillage sur lequel les mesures seront définies
-        k : int L'ordre polynomial des éléments finis
-        mt : dolfinx.mesh.MeshTags Les tags du maillage identifiant les différentes parties de la frontière
-        boundaries : dict Dictionnaire associant les noms des frontières à leurs identifiants numériques
-            
-        Returns
-        -------
-        dx_c : ufl.Measure Mesure pour l'intégration volumique
-        ds_c : ufl.Measure Mesure pour l'intégration surfacique, incluant les conditions aux limites
-        cbt : int Tag pour les frontières internes des cellules (généralement 0)
+        Returns:
+            numpy.ndarray: Facettes à intégrer, identifiées par des paires (cellule, indice local de facette).
         """
         n_f = cell_num_entities(self.mesh.topology.cell_type, self.fdim)
         n_c = self.mesh.topology.index_map(self.tdim).size_local
-        cell_boundary_facets = vstack((repeat(arange(n_c), n_f), tile(arange(n_f), n_c))).T.flatten()
-        cbt = 0  # cell_boundaries_tag
         
-        facet_integration_entities = [(cbt, cell_boundary_facets)]
-        facet_integration_entities += [
-            (tag, compute_integration_domains(
-                IntegralType.exterior_facet, self.mesh.topology, self.facet_tag.find(tag), self.fdim))
-            for tag in sort(self.flag_list)]
+        # Crée toutes les paires (cellule, facette locale) pour toutes les cellules
+        return vstack((repeat(arange(n_c), n_f), tile(arange(n_f), n_c))).T.flatten()
+    
+    # def identify_interior_facets(self):
+    #     """
+    #     Identifie correctement les facettes intérieures du maillage en excluant les facettes extérieures.
+        
+    #     Returns:
+    #         numpy.ndarray: Tableau d'entités d'intégration pour les facettes intérieures.
+    #     """
+    #     # # S'assurer que toutes les connectivités nécessaires sont créées
+    #     self.mesh.topology.create_connectivity(self.fdim, self.tdim)
+    #     self.mesh.topology.create_connectivity(self.tdim, self.fdim)
+        
+    #     # Obtenir toutes les paires (cellule, facette locale)
+    #     all_facets = self.compute_cell_boundary_facets()
+        
+    #     # Obtenir les facettes extérieures
+    #     exterior_facets = exterior_facet_indices(self.mesh.topology)
+    #     print(f"DEBUG: {len(exterior_facets)} facettes extérieures trouvées")
+        
+    #     # Calculer les entités d'intégration pour les facettes extérieures
+    #     exterior_entities = compute_integration_domains(
+    #         IntegralType.exterior_facet, self.mesh.topology, exterior_facets, self.fdim)
+        
+    #     # Calculer les indices à supprimer de all_facets
+    #     n_f = cell_num_entities(self.mesh.topology.cell_type, self.fdim)
+    #     remove_index = n_f * exterior_entities[::2] + exterior_entities[1::2]
+        
+    #     # Supprimer ces indices pour obtenir les facettes intérieures
+    #     interior_facets = delete(all_facets.reshape(-1, 2), remove_index, axis=0).flatten()        
+    #     return interior_facets
 
-
+    def set_measures(self):
+        """Configure les mesures d'intégration et les domaines pour une formulation HDG."""
+        
+        # Obtenir les entités d'intégration pour les facettes intérieures
+        # interior_entities = self.identify_interior_facets()
+        
+        # Tags pour les différents types de frontières
+        cell_boundaries_tag = 0       # Toutes les frontières
+        # interior_boundaries_tag = 10  # Frontières intérieures
+        
+        # Calculer toutes les facettes de cellules
+        n_f = cell_num_entities(self.mesh.topology.cell_type, self.fdim)
+        n_c = self.mesh.topology.index_map(self.tdim).size_local
+        all_facets = vstack((repeat(arange(n_c), n_f), tile(arange(n_f), n_c))).T.flatten()
+        
+        # Initialiser les entités d'intégration
+        facet_integration_entities = [(cell_boundaries_tag, all_facets)]
+        
+        # Ajouter les frontières externes marquées
+        if hasattr(self, 'facet_to_mesh_tag'):
+            for tag in self.flag_list:
+                # Utiliser la correspondance précalculée
+                entities = compute_integration_domains(
+                    IntegralType.exterior_facet, self.mesh.topology, 
+                    self.facet_to_mesh_tag[tag], self.fdim)
+                facet_integration_entities.append((tag, entities))
+        
+        # Degrés de quadrature
         quad_deg_facet = (2 * self.deg + 1) ** (self.tdim)
         quad_deg_volume = (self.deg + 1) ** self.tdim
-        print("Nombre de points de Gauss", quad_deg_volume)
-        self.dx_c = Measure("dx", domain = self.mesh,  metadata = {"quadrature_degree": quad_deg_volume})
-        self.ds_c = Measure("ds", subdomain_data = facet_integration_entities,
-                      domain = self.mesh, metadata = {"quadrature_degree": quad_deg_facet})
-        self.ds_tot = self.ds_c(cbt) #self.ds_c(0) contient l'ensembles des facettes extérieures du submesh
+        print(f"Nombre de points de Gauss: {quad_deg_volume}")
         
+        # Définir les mesures
+        self.dx_c = Measure("dx", domain=self.mesh, metadata={"quadrature_degree": quad_deg_volume})
+        self.ds_c = Measure("ds", subdomain_data=facet_integration_entities,
+                      domain=self.mesh, metadata={"quadrature_degree": quad_deg_facet})
+        
+        # Mesures spécifiques
+        self.ds_tot = self.ds_c(cell_boundaries_tag)
+        
+        # # Créer une mesure spécifique pour les facettes intérieures
+        # facet_integration_entities_int = [(interior_boundaries_tag, interior_entities)]
+        # self.ds_int = Measure("ds", subdomain_data=facet_integration_entities_int,
+        #                     domain=self.mesh, metadata={"quadrature_degree": quad_deg_facet})
+        
+        # # Vérification de l'intégration sur les facettes intérieures
+        # print("\n==== VÉRIFICATION DE L'INTÉGRATION ====")
+        
+        # # Créer une constante égale à 1
+        # one = Constant(self.mesh, ScalarType(1.0))
+        
+        # # Intégrer sur toutes les facettes
+        # from dolfinx.fem import form, assemble_scalar
+        # form_tot = form(one * self.ds_tot)
+        # integral_tot = assemble_scalar(form_tot)
+        # print(f"Intégrale de 1 sur toutes les facettes: {integral_tot}")
+        
+        # # Intégrer sur les facettes intérieures
+        # form_int = form(one * self.ds_int(interior_boundaries_tag))
+        # integral_int = assemble_scalar(form_int)
+        # print(f"Intégrale de 1 sur les facettes intérieures: {integral_int}")
+        
+        # # Calcul de la valeur attendue
+        # n_interior = len(interior_entities) // 2
+        # print(f"Nombre de paires d'entités intérieures: {n_interior}")
+        # print(f"Valeur attendue (longueur de chaque facette est 1): {n_interior}")
+        # print(f"Test réussi? {abs(integral_int - n_interior) < 1e-10}")
+            
     def set_auxiliary_field(self):
         """
         Initialise quelques champs auxiliaires qui permettent d'écrire de 

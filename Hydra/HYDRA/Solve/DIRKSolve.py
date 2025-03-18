@@ -25,11 +25,8 @@ class DIRKSolve(Solve):
         self.dirk_method = kwargs.pop("dirk_method", "SDIRK2")
         self.dirk_params = DIRKParameters(self.dirk_method)
         print(f"Initializing DIRK solver: {self.dirk_params}")
-        
-        # Initialiser le solveur parent (sans lancer la résolution)
         self.pb = problem
         self.initialize_solve(problem, **kwargs)
-        # Initialiser les structures pour les étapes intermédiaires
         self.initialize_stages()
         
         print("Start solving with DIRK method")       
@@ -68,10 +65,9 @@ class DIRKSolve(Solve):
         j : int Numéro du pas de temps.
         """
         super().update_time(j)
-        
-        # Calculer les temps intermédiaires pour chaque étape
         self.stage_times = [self.t + self.dirk_params.c[s] * self.dt for s in range(self.num_stages)]
     
+
     def set_stage_system(self, stage):
         """
         Prépare le système pour une étape spécifique du schéma DIRK.
@@ -80,50 +76,37 @@ class DIRKSolve(Solve):
         ----------
         stage : int Numéro de l'étape DIRK (0 à num_stages-1).
         """
-        # Sauvegarder les solutions originales
-        self.save_original_state()
-        
-        # Calculer l'approximation initiale pour cette étape
-        self.calculate_stage_initial_approximation(stage)
-        
-        # Configurer le résidu pour cette étape
-        self.configure_stage_residual(stage)
+        self.save_original_state() # Sauvegarder les solutions originales
+        self.calculate_stage_initial_approximation(stage) # Calculer l'approximation initiale pour cette étape
+        self.configure_stage_residual(stage)# Configurer le résidu pour cette étape
     
     def save_original_state(self):
         """
         Sauvegarde l'état original du problème avant modification pour une étape DIRK.
         """
-        self._original_residual = self.pb.residual
-        
+        #Test#######
+        # self._original_residual = self.pb.residual
+        ###########
         # Sauvegarder les solutions actuelles
         for i, u_base in enumerate(self.pb.U_base):
             self.temp_solutions[i].x.array[:] = u_base.x.array
     
     def calculate_stage_initial_approximation(self, stage):
         """
-        Calcule l'approximation initiale pour une étape DIRK.
-        
-        Parameters
-        ----------
-        stage : int
-            Numéro de l'étape.
+        Version simplifiée qui utilise directement les coefficients A
+        de Butcher pour calculer l'approximation initiale.
         """
-        # Pour chaque composante du vecteur solution
         for i, u_n in enumerate(self.pb.Un_base):
-            # Partir de la solution au pas de temps précédent
-            u_approx = u_n.x.array.copy()
-            
-            # Ajouter les contributions des étapes précédentes
+            # Commencer par la solution au pas de temps précédent
+            self.pb.U_base[i].x.array[:] = u_n.x.array.copy()
+            # Ajouter les contributions des étapes précédentes (si applicable)
             for prev_stage in range(stage):
                 a_ij = self.dirk_params.A[stage, prev_stage]
-                if a_ij != 0.0:
+                if a_ij != 0.0:  # Éviter les calculs inutiles
                     prev_u = self.stage_solutions[prev_stage][i]
-                    a_jj = self.dirk_params.A[prev_stage, prev_stage]
-                    # K_j = (prev_u - u_n) / (dt * a_jj)
-                    u_approx += self.dt * a_ij * (prev_u.x.array - u_n.x.array) / (self.dt * a_jj)
-            
-            # Utiliser cette approximation comme point de départ pour la résolution
-            self.pb.U_base[i].x.array[:] = u_approx
+                    # K_j ≈ (prev_u - u_n) / dt
+                    # self.pb.U_base[i].x.array[:] += self.dt * a_ij * (prev_u.x.array - u_n.x.array) / self.dt
+                    self.pb.U_base[i].x.array[:] += a_ij * (prev_u.x.array - u_n.x.array)
     
     def configure_stage_residual(self, stage):
         """
@@ -146,43 +129,56 @@ class DIRKSolve(Solve):
         for i in range(len(self.pb.bc_class.mcl)):            
             self.pb.bc_class.mcl[i].constant.value = self.pb.bc_class.mcl[i].value_array[stage_step]
         
-        # Recalculer le résidu complet
-        self.pb.set_form()
-    
-    def restore_original_state(self):
-        """
-        Restaure l'état original du problème après une étape DIRK.
-        """
-        self.pb.residual = self._original_residual
-        self.pb.dt_factor = 1.0 / self.dt  # Rétablir le facteur par défaut
-        
-        # Restaurer les solutions
-        for i, u_base in enumerate(self.pb.U_base):
-            u_base.x.array[:] = self.temp_solutions[i].x.array
-    
     def solve_stage(self, stage):
         """
         Résout une étape spécifique du schéma DIRK.
-        
-        Parameters
-        ----------
-        stage : int Numéro de l'étape DIRK à résoudre.
         """
         self.set_stage_system(stage)
-        self.problem_solve() # Résoudre le système pour cette étape
+        self.problem_solve()  # Résoudre le système pour cette étape
         
         # Stocker la solution pour cette étape
         for i, u in enumerate(self.pb.U_base):
             self.stage_solutions[stage][i].x.array[:] = u.x.array
         
-        # Restaurer l'état original
-        self.restore_original_state()
+        # Restaurer uniquement les paramètres du formulaire, pas les solutions
+        
+        #Test#######
+        # self.pb.residual = self._original_residual
+        #Test#######
+        self.pb.dt_factor = 1.0 / self.dt  # Rétablir le facteur par défaut
+        
     
     def compute_final_solution(self):
         """
-        Calcule la solution finale en utilisant la formule du schéma DIRK.
+        Calcule la solution finale en utilisant la formule du schéma DIRK
+        selon l'équation solution_dirk.
         """
-        # Pour chaque variable
+        # Calculer les z_h^{n,i} en séquence selon l'équation
+        z_stage = []
+        
+        for stage in range(self.num_stages):
+            z_current = []
+            for i, u_n in enumerate(self.pb.Un_base):
+                a_ii = self.dirk_params.A[stage, stage]
+                stage_u = self.stage_solutions[stage][i]
+                
+                # Calcul de base pour z_h^{n,i}
+                z_i = (stage_u.x.array - u_n.x.array) / (self.dt * a_ii)
+                
+                # Soustraire les contributions des étapes précédentes
+                if stage > 0:
+                    for prev_stage in range(stage):
+                        a_ij = self.dirk_params.A[stage, prev_stage]
+                        prev_z = z_stage[prev_stage][i]
+                        
+                        # La formule correcte sans a_jj
+                        z_i -= (a_ij / a_ii) * prev_z
+                
+                z_current.append(z_i)
+            
+            z_stage.append(z_current)
+        
+        # Calculer la solution finale
         for i, u_n in enumerate(self.pb.Un_base):
             # Commencer avec la solution au pas de temps précédent
             self.pb.U_base[i].x.array[:] = u_n.x.array
@@ -190,13 +186,11 @@ class DIRKSolve(Solve):
             # Ajouter les contributions de chaque étape
             for stage in range(self.num_stages):
                 b_s = self.dirk_params.b[stage]
-                a_ss = self.dirk_params.A[stage, stage]
-                stage_u = self.stage_solutions[stage][i]
+                z_i = z_stage[stage][i]
                 
-                # K_s = (stage_u - u_n) / (dt * a_ss)
-                # U^{n+1} = U^n + dt * sum(b_s * K_s)
-                self.pb.U_base[i].x.array[:] += self.dt * b_s * (stage_u.x.array - u_n.x.array) / (self.dt * a_ss)
-    
+                # U^{n+1} = U^n + dt * sum(b_i * z_h^{n,i})
+                self.pb.U_base[i].x.array[:] += self.dt * b_s * z_i
+        
     def iterative_solve(self, **kwargs):
         """
         Résout le problème en utilisant un schéma DIRK.

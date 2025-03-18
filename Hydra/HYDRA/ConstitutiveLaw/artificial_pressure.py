@@ -29,7 +29,7 @@ class ArtificialPressure:
     def set_artifial_pressure(self, sensor):
         rho, u = self.U[0], self.U[1]/self.U[0]
         coeff = 1.5e-3
-        p_star = coeff * rho * self.h / self.deg * (inner(u, u) + self.c**2)**0.5 * sensor.sensor_expr * npart(div(u))
+        p_star = coeff * rho * self.h / (self.deg+1) * (inner(u, u) + self.c**2)**0.5 * sensor.sensor_expr * npart(div(u))
         self.p_star_expr = Expression(p_star, self.V_p.element.interpolation_points())
         self.p_star.interpolate(self.p_star_expr)
     

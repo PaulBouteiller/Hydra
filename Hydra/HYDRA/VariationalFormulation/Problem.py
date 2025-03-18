@@ -7,11 +7,11 @@ from ..ConstitutiveLaw.eos import EOS
 from ..utils.default_parameters import default_fem_parameters
 
 from numpy import (hstack, argsort, finfo, full_like, arange, int32, unique, 
-                    tile, repeat, vstack, sort, full, zeros, array, delete,  setdiff1d, where)
+                    tile, repeat, vstack, full, zeros, array)
 
 from dolfinx.fem import (compute_integration_domains, dirichletbc, locate_dofs_topological,
                           IntegralType, Constant, Expression, Function, functionspace)
-from dolfinx.mesh import locate_entities_boundary, meshtags, create_submesh, exterior_facet_indices, locate_entities
+from dolfinx.mesh import meshtags, create_submesh, locate_entities
 from ufl import (Measure, inner, FacetNormal)
 
 from mpi4py import MPI
@@ -21,8 +21,6 @@ from ..utils.MyExpression import MyConstant
 
 from dolfinx import log
 from dolfinx.cpp.log import LogLevel
-
-# Utiliser l'énumération LogLevel au lieu de logging.WARNING
 log.set_log_level(LogLevel.WARNING)
 
 class BoundaryConditions:

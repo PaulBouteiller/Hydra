@@ -135,4 +135,5 @@ class Square(CompressibleEuler):
     
 pb = Square(Acier)
 # Solve(pb, TFin = t_end, dt = dt)
-DIRKSolve(pb, dirk_method="ESDIRK3(2)5L[2]SA", TFin=t_end, dt=dt)
+Solve(pb, dirk_method="SDIRK2", TFin=t_end, dt=dt)
+# DIRKSolve(pb, dirk_method="ESDIRK3(2)5L[2]SA", TFin=t_end, dt=dt)

@@ -5,25 +5,11 @@ Created on Thu Mar 10 16:17:24 2022
 Paramètres par défaut
 """
 
-def default_parameters():
-    p = {}
-    subset_list = ["dynamic", "fem", "damping", "post_processing"]
-    for subparset in subset_list:
-        subparset_is = eval("default_" + subparset + "_parameters()")
-        p.update({subparset:subparset_is})
-    return p
-
 def default_fem_degree():
     """
     Degré d'interpolation par défaut du champ de déplacement
     """
     return 3
-
-def default_T_fem_degree():
-    """
-    Degré d'interpolation par défaut du champ de température
-    """
-    return 1
 
 def default_fem_parameters():
     """
@@ -31,7 +17,6 @@ def default_fem_parameters():
     """
     fem={}
     fem.update({"u_degree" : default_fem_degree()})
-    fem.update({"Tdeg" : default_T_fem_degree()})
     fem.update({"schema" : "default"})
     return fem
 
@@ -46,13 +31,15 @@ def default_damping_parameters():
     damp.update({"correction" : True})
     return damp
 
-def default_Newton_displacement_solver_parameters():
+def default_Newton_parameters():
     solver_u = {}
-    solver_u.update({"linear_solver" : "mumps"})
+    solver_u.update({"ksp_type": "preonly"})
+    solver_u.update({"pc_type": "lu"})
+    solver_u.update({"pc_factor_mat_solver_type" : "mumps"})
     solver_u.update({"relative_tolerance" : 1e-8})
     solver_u.update({"absolute_tolerance" : 1e-8})
     solver_u.update({"convergence_criterion" : "incremental"})
-    solver_u.update({"maximum_iterations" : 2000})
+    solver_u.update({"maximum_iterations" : 50})
     return solver_u
 
 def default_post_processing_parameters():

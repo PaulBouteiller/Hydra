@@ -19,6 +19,5 @@ from .VariationalFormulation.NavierStokes import CompressibleNavierStokes
 
 from .utils.MyExpression import MyConstant
 
-from .Solve.Solve import *
-from.Solve.DIRKSolve import DIRKSolve
+from .Solve.Solve import Solve
 print("Loading Hydra base on dolfinx version " + __version__)

@@ -1,12 +1,5 @@
-"""
-Classe définissant les paramètres d'un schéma DIRK.
-Stocke les coefficients de Butcher et fournit des méthodes utilitaires.
-
-Cette classe implémente de nombreuses méthodes DIRK optimisées basées sur
-l'article "Diagonally implicit Runge–Kutta methods for stiff ODEs" 
-par Kennedy & Carpenter (Applied Numerical Mathematics 146, 2019).
-"""
 import numpy as np
+from numpy import sqrt, array
 
 class DIRKParameters:
     """
@@ -42,13 +35,23 @@ class DIRKParameters:
             - SA = stiffly-accurate (γ est répété dans la dernière ligne/colonne)
         """
         # Méthodes DIRK traditionnelles
-        if method == "SDIRK2":
+        if method == "BDF1":
+            # BDF1 = Backward Euler (schéma d'ordre 1)
+            gamma = 1.0
+            self.A = np.array([[gamma]])
+            self.c = np.array([gamma])
+            self.b = np.array([gamma])
+            self.order = 1
+            self.embedded_order = None
+            self.bhat = None
+        
+        elif method == "SDIRK2":
             # SDIRK d'ordre 2 avec gamma = 1 - 1/sqrt(2)
-            gamma = 1.0 - 1.0/np.sqrt(2.0)
-            self.A = np.array([[gamma, 0.0], 
+            gamma = 1.0 - 1.0/sqrt(2.0)
+            self.A = array([[gamma, 0.0], 
                                [1.0-gamma, gamma]])
-            self.c = np.array([gamma, 1.0])
-            self.b = np.array([1.0-gamma, gamma])
+            self.c = array([gamma, 1.0])
+            self.b = array([1.0-gamma, gamma])
             self.order = 2
             self.embedded_order = None
             self.bhat = None
@@ -56,13 +59,13 @@ class DIRKParameters:
         elif method == "SDIRK3":
             # SDIRK d'ordre 3
             gamma = 0.4358665215084589994160194  # Racine de x³ - 3x² + 3x - 1/2 = 0
-            self.A = np.array([
+            self.A = array([
                 [gamma, 0.0, 0.0],
                 [(1.0-gamma)/2.0, gamma, 0.0],
                 [1.0/(4.0*gamma), 1.0-1.0/(4.0*gamma), gamma]
             ])
-            self.c = np.array([gamma, (1.0+gamma)/2.0, 1.0])
-            self.b = np.array([1.0/(4.0*gamma), 1.0-1.0/(4.0*gamma), gamma])
+            self.c = array([gamma, (1.0+gamma)/2.0, 1.0])
+            self.b = array([1.0/(4.0*gamma), 1.0-1.0/(4.0*gamma), gamma])
             self.order = 3
             self.embedded_order = None
             self.bhat = None
@@ -70,13 +73,13 @@ class DIRKParameters:
         elif method == "ESDIRK3":
             # ESDIRK d'ordre 3 (Explicit first stage)
             gamma = 0.4358665215084589994160194
-            self.A = np.array([
+            self.A = array([
                 [0.0, 0.0, 0.0],
                 [0.87173304301691, gamma, 0.0],
                 [0.84457060015369, -0.12990812375553, gamma]
             ])
-            self.c = np.array([0.0, 0.87173304301691 + gamma, 0.84457060015369 - 0.12990812375553 + gamma])
-            self.b = np.array([0.84457060015369, -0.12990812375553, gamma])
+            self.c = array([0.0, 0.87173304301691 + gamma, 0.84457060015369 - 0.12990812375553 + gamma])
+            self.b = array([0.84457060015369, -0.12990812375553, gamma])
             self.order = 3
             self.embedded_order = None
             self.bhat = None
@@ -84,15 +87,15 @@ class DIRKParameters:
         elif method == "ESDIRK4":
             # ESDIRK d'ordre 4 (méthode L-stable)
             gamma = 0.25
-            self.A = np.array([
+            self.A = array([
                 [0.0, 0.0, 0.0, 0.0, 0.0],
                 [0.5, 0.25, 0.0, 0.0, 0.0],
                 [0.17, 0.5-gamma-0.17, gamma, 0.0, 0.0],
                 [0.39, 0.25-0.39, 0.45-gamma, gamma, 0.0],
                 [0.15, 0.2-0.15, 0.6-gamma-0.2, 0.25, gamma]
             ])
-            self.c = np.array([0.0, 0.75, 0.5, 0.75, 1.0])
-            self.b = np.array([0.15, 0.2-0.15, 0.6-gamma-0.2, 0.25, gamma])
+            self.c = array([0.0, 0.75, 0.5, 0.75, 1.0])
+            self.b = array([0.15, 0.2-0.15, 0.6-gamma-0.2, 0.25, gamma])
             self.order = 4
             self.embedded_order = None
             self.bhat = None
@@ -125,7 +128,7 @@ class DIRKParameters:
             self.b = self.A[3, :]
             
             # Coefficients pour l'estimateur d'erreur embedded (ordre 2) - Eq. 28
-            self.bhat = np.array([0.2000000000000000, -0.5000000000000000, 0.2179034442100000, 0.0820965557900000])
+            self.bhat = array([0.2, -0.5, 0.2179034442100000, 0.0820965557900000])
             
             self.order = 3
             self.embedded_order = 2
@@ -143,7 +146,7 @@ class DIRKParameters:
             self.A[1, 0] = 2*gamma
             self.A[1, 1] = gamma
             # Troisième ligne - avec c3 = 9(2+sqrt(2))/40
-            c3 = 9.0*(2.0 + np.sqrt(2.0))/40.0
+            c3 = 9.0*(2.0 + sqrt(2.0))/40.0
             self.A[2, 0] = (c3 - gamma)/2.0
             self.A[2, 1] = (c3 - gamma)/2.0
             self.A[2, 2] = gamma
@@ -169,7 +172,7 @@ class DIRKParameters:
             self.b = self.A[4, :]
             
             # Coefficients embarqués d'ordre 2
-            self.bhat = np.array([0.0, 0.25, 0.25, 0.25, 0.25])
+            self.bhat = array([0.0, 0.25, 0.25, 0.25, 0.25])
             
             self.order = 3
             self.embedded_order = 2
@@ -230,9 +233,8 @@ class DIRKParameters:
             self.b = self.A[5, :]
             
             # Coefficients embarqués d'ordre 3
-            self.bhat = np.array(
-                [21.0/200.0, 0.0, 1097883.0/4675329.0, 3867923.0/9096056.0, 2575211.0/16711741.0, 0.0]
-            )
+            self.bhat = array([21.0/200.0, 0.0, 1097883.0/4675329.0, 
+                               3867923.0/9096056.0, 2575211.0/16711741.0, 0.0])
             
             self.order = 4
             self.embedded_order = 3
@@ -280,7 +282,7 @@ class DIRKParameters:
             self.b = self.A[5, :]
             
             # Coefficients embarqués d'ordre 3
-            self.bhat = np.array([
+            self.bhat = array([
                 -1007911106287.0/12117826057527.0,
                 17694008993113.0/35931961998873.0,
                 5816803040497.0/11256217655929.0,
@@ -343,7 +345,7 @@ class DIRKParameters:
             self.b = self.A[6, :]
             
             # Coefficients embarqués d'ordre 3
-            self.bhat = np.array([
+            self.bhat = array([
                 -1517409284625.0/6267517876163.0,
                 8291371032348.0/12587291883523.0,
                 5328310281212.0/10646448185159.0,
@@ -409,7 +411,7 @@ class DIRKParameters:
             self.b = self.A[6, :]
             
             # Coefficients embarqués d'ordre 4
-            self.bhat = np.array([
+            self.bhat = array([
                 -582099335757.0/7214068459310.0,
                 615023338567.0/3362626566945.0,
                 3192122436311.0/6174152374399.0,
@@ -473,7 +475,7 @@ class DIRKParameters:
             self.b = self.A[6, :]
             
             # Coefficients embarqués d'ordre 4
-            self.bhat = np.array([
+            self.bhat = array([
                 -582099335757.0/7214068459310.0,
                 615023338567.0/3362626566945.0,
                 3192122436311.0/6174152374399.0,
@@ -546,7 +548,7 @@ class DIRKParameters:
             self.b = self.A[7, :]
             
             # Coefficients embarqués d'ordre 4
-            self.bhat = np.array([
+            self.bhat = array([
                 701879993119.0/7084679725724.0,
                 -8461269287478.0/14654112271769.0,
                 6612459227430.0/11388259134383.0,
@@ -631,7 +633,7 @@ class DIRKParameters:
             self.b = self.A[8, :]
             
             # Coefficients embarqués d'ordre 5
-            self.bhat = np.array([
+            self.bhat = array([
                 -204006714482445.0/253120897457864.0,
                 0.0,
                 -8180624343107.0/19743038324217.0,
@@ -659,8 +661,13 @@ class DIRKParameters:
         if self.embedded_order:
             info += f"Embedded order: {self.embedded_order}\n"
         info += f"Stages: {self.num_stages}\n"
-        info += f"Diagonal coefficient γ: {self.A[1, 1]:.6f}\n"
-        info += "L-stability: Yes (optimal for stiff problems)\n"
-        info += "Stage-order: 2 (reduced order reduction)\n"
-        info += "Stiffly-accurate: Yes (better for DAEs)\n"
+        info += f"Diagonal coefficient γ: {self.A[0, 0]:.6f}\n"
+        if self.method != "BDF1":  # Ajout d'une condition pour BDF1
+            info += "L-stability: Yes (optimal for stiff problems)\n"
+            info += "Stage-order: 2 (reduced order reduction)\n"
+            info += "Stiffly-accurate: Yes (better for DAEs)\n"
+        else:
+            info += "L-stability: Yes\n"
+            info += "Stage-order: 1\n"
+            info += "Stiffly-accurate: Yes\n"
         return info

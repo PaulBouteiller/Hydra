@@ -1,10 +1,5 @@
-from __future__ import annotations
-
 from typing import Callable
-import logging
 from petsc4py import PETSc
-import ufl
-import dolfinx
 
 from dolfinx.fem import form
 from dolfinx.fem.petsc import (create_matrix_block, create_vector_block,
@@ -12,24 +7,21 @@ from dolfinx.fem.petsc import (create_matrix_block, create_vector_block,
 
 from dolfinx.cpp.la.petsc import scatter_local_vectors
 from petsc4py.PETSc import ScatterMode, InsertMode
+from dolfinx.log import set_log_level, LogLevel
+from dolfinx.cpp.nls.petsc import NewtonSolver
 
-
-logger = logging.getLogger(__name__)
-
-class BlockedNewtonSolver(dolfinx.cpp.nls.petsc.NewtonSolver):
-    def __init__(self, F: list[ufl.form.Form], u: list[dolfinx.fem.Function],
-                 J: list[list[ufl.form.Form]],
-                 bcs: list[dolfinx.fem.DirichletBC] = [],
+class BlockedNewtonSolver(NewtonSolver):
+    def __init__(self, F, u, J, bcs = [],
                  form_compiler_options: dict | None = None,
                  jit_options: dict | None = None,
                  petsc_options: dict | None = None,
                  entity_maps: dict | None = None):
         """Initialize solver for solving a non-linear problem using Newton's method.
         Args:
-            F: List of PDE residuals [F_0(u, v_0), F_1(u, v_1), ...]
-            u: List of unknown functions u=[u_0, u_1, ...]
-            bcs: List of Dirichlet boundary conditions
-            J: UFL representation of the Jacobian (Optional)
+            F: list[ufl.form.Form] List of PDE residuals [F_0(u, v_0), F_1(u, v_1), ...]
+            u: list[dolfinx.fem.Function] List of unknown functions u=[u_0, u_1, ...]
+            J: list[list[ufl.form.Form]] UFL representation of the Jacobian (Optional)
+            bcs: list[dolfinx.fem.DirichletBC] List of Dirichlet boundary conditions
                 Note:
                     If not provided, the Jacobian will be computed using the
                     assumption that the test functions come from a ``ufl.MixedFunctionSpace``
@@ -94,12 +86,12 @@ class BlockedNewtonSolver(dolfinx.cpp.nls.petsc.NewtonSolver):
         self._post_solve_callback = callback
 
     @property
-    def L(self) -> list[dolfinx.fem.Form]:
+    def L(self):
         """Compiled linear form (the residual form)"""
         return self._F
 
     @property
-    def a(self) -> list[list[dolfinx.fem.Form]]:
+    def a(self):
         """Compiled bilinear form (the Jacobian form)"""
         return self._a
 
@@ -113,10 +105,10 @@ class BlockedNewtonSolver(dolfinx.cpp.nls.petsc.NewtonSolver):
         self._dx.destroy()
         self._x.destroy()
 
-    def _pre_newton_iteration(self, x: PETSc.Vec) -> None:
+    def _pre_newton_iteration(self, x):
         """Function called before the residual or Jacobian is
         computed.
-        Args: x: The vector containing the latest solution
+        Args: x: PETSc.Vec The vector containing the latest solution
         """
         if self._pre_solve_callback is not None:
             self._pre_solve_callback(self)
@@ -127,11 +119,11 @@ class BlockedNewtonSolver(dolfinx.cpp.nls.petsc.NewtonSolver):
                                for ui in self._u])
         x.ghostUpdate(addv = InsertMode.INSERT, mode = ScatterMode.FORWARD)
 
-    def _assemble_residual(self, x: PETSc.Vec, b: PETSc.Vec) -> None:
+    def _assemble_residual(self, x, b):
         """Assemble the residual F into the vector b.
         Args:
-            x: The vector containing the latest solution
-            b: Vector to assemble the residual into
+            x: PETSc.Vec The vector containing the latest solution
+            b: PETSc.Vec Vector to assemble the residual into
         """
         # Assemble F(u_{i-1}) - J(u_D - u_{i-1}) and set du|_bc= u_D - u_{i-1}
         with b.localForm() as b_local:
@@ -139,10 +131,9 @@ class BlockedNewtonSolver(dolfinx.cpp.nls.petsc.NewtonSolver):
         assemble_vector_block(b, self._F, self._a, bcs=self._bcs, x0=x, **{"alpha": -1.0})
         b.ghostUpdate(InsertMode.INSERT_VALUES, ScatterMode.FORWARD)
 
-    def _assemble_jacobian(self, x: PETSc.Vec, A: PETSc.Mat) -> None:
+    def _assemble_jacobian(self, x, A: PETSc.Mat) -> None:
         """Assemble the Jacobian matrix.
-        Args:
-            x: The vector containing the latest solution
+        Args: x: PETSc.Vec The vector containing the latest solution
         """
         # Assemble Jacobian
         A.zeroEntries()
@@ -166,7 +157,7 @@ class BlockedNewtonSolver(dolfinx.cpp.nls.petsc.NewtonSolver):
     def solve(self):
         """Solve non-linear problem into function. Returns the number
         of iterations and if the solver converged."""
-        dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
+        set_log_level(LogLevel.WARNING)
         n, converged = super().solve(self._x)
         self._x.ghostUpdate(addv = InsertMode.INSERT, mode = ScatterMode.FORWARD)
         return n, converged

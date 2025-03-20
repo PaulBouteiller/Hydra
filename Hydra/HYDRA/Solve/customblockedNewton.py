@@ -1,7 +1,5 @@
 from typing import Callable
 from petsc4py import PETSc
-
-from dolfinx.fem import form
 from dolfinx.fem.petsc import (create_matrix_block, create_vector_block,
                                assemble_matrix_block, assemble_vector_block)
 

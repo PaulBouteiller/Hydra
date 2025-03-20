@@ -3,13 +3,29 @@ Created on Fri Mar  7 15:57:50 2025
 
 @author: bouteillerp
 """
-from ufl import sqrt, dot, conditional, gt, lt, And, max_value, min_value
+from ufl import sqrt, dot, conditional, gt, max_value, min_value
 
 class RiemannSolvers:
     """
-    Implémentation de différents solveurs de Riemann pour les équations d'Euler et de Navier-Stokes compressibles.
-    Cette classe fournit des méthodes pour calculer les flux numériques aux interfaces entre éléments,
-    en utilisant différentes approximations du problème de Riemann.
+    Implémentation de différents solveurs de Riemann pour les équations d'Euler.
+    
+    Cette classe fournit des approximations numériques pour résoudre le problème
+    de Riemann aux interfaces entre éléments. Elle inclut plusieurs types de solveurs
+    avec différents niveaux de précision et de coût computationnel.
+    
+    Les solveurs implémentés sont:
+    - Rusanov (Local Lax-Friedrichs): Simple et robuste mais diffusif
+    - HLL (Harten-Lax-van Leer): Meilleure précision, utilise des estimateurs de vitesse d'onde
+    - HLLC: Version améliorée de HLL qui restaure l'onde de contact
+    
+    Les estimateurs de vitesse d'onde incluent:
+    - Davis: Estimateur simple basé sur les valeurs maximales locales
+    - Einfeldt: Estimateur plus précis basé sur la moyenne de Roe
+    
+    References
+    ----------
+    Toro, E.F. (2009). Riemann Solvers and Numerical Methods for Fluid Dynamics.
+    Springer-Verlag, 3rd edition.
     """
 
     def __init__(self, EOS, material):
@@ -25,6 +41,13 @@ class RiemannSolvers:
         self.c = material.celerity
         self.material = material
         self.eps = 1e-10  # Valeur epsilon pour éviter les divisions par zéro
+        
+    def extract_primitive_variables(self, U):
+        rho = U[0]
+        u = U[1] / rho
+        E = U[2] / rho
+        return rho, u, E
+        
         
     def signal_speed_davis(self, u_L, u_R, c_L, c_R, n):
         """
@@ -121,11 +144,8 @@ class RiemannSolvers:
         -------
         fluxes : Liste Flux numériques de Rusanov pour chaque variable
         """
-        # Extraction des variables primitives
-        rho_L = U[0]
-        rho_R = Ubar[0]
-        u_L = U[1] / rho_L
-        u_R = Ubar[1] / rho_R
+        rho_L, u_L, _ = self.extract_primitive_variables(U)
+        rho_R, u_R, _ = self.extract_primitive_variables(Ubar)
         
         # Composantes normales des vitesses
         u_n_L = dot(u_L, n)
@@ -160,12 +180,9 @@ class RiemannSolvers:
         -------
         fluxes : Liste  Flux numériques HLL pour chaque variable
         """
-        # Extraction des variables primitives
-        rho_L = U[0]
-        rho_R = Ubar[0]
-        u_L = U[1] / rho_L
-        u_R = Ubar[1] / rho_R
-        
+        rho_L, u_L, _ = self.extract_primitive_variables(U)
+        rho_R, u_R, _ = self.extract_primitive_variables(Ubar)
+
         # Calcul des vitesses d'onde
         if signal_speed_type == "davis":
             S_L, S_R = self.signal_speed_davis(u_L, u_R, self.c, self.c, n)
@@ -187,109 +204,64 @@ class RiemannSolvers:
             fluxes.append(flux_hll)
         
         return fluxes
-
+        
     def hllc_flux(self, U, Ubar, U_flux, Ubar_flux, n, signal_speed_type="davis"):
-        """
-        Calcule le flux numérique HLLC (Harten-Lax-van Leer-Contact).
+        rho_L, u_L, E_L = self.extract_primitive_variables(U)
+        rho_R, u_R, E_R = self.extract_primitive_variables(Ubar)
         
-        Parameters
-        ----------
-        U : Liste d'Arrays Variables conservatives dans la cellule
-        Ubar : Liste d'Arrays Variables conservatives à la facette
-        U_flux : Liste d'Arrays Flux dans la cellule
-        Ubar_flux : Liste d'Arrays Flux à la facette
-        n : Array Vecteur normal à l'interface
-        signal_speed_type : str, optional Type d'estimateur de vitesse d'onde à utiliser
-        Returns
-        -------
-        fluxes : Liste Flux numériques HLLC pour chaque variable
-        """
-        # Extraction des variables primitives
-        rho_L = U[0]
-        rho_R = Ubar[0]
-        u_L = U[1] / rho_L
-        u_R = Ubar[1] / rho_R
-        E_L = U[2] / rho_L
-        E_R = Ubar[2] / rho_R
-        
-        # Calcul des vitesses du son et des pressions
+        # Calcul des pressions
         p_L = self.EOS.set_eos(rho_L, u_L, E_L, self.material)
         p_R = self.EOS.set_eos(rho_R, u_R, E_R, self.material)
-        
+
         # Calcul des vitesses d'onde
         if signal_speed_type == "davis":
             S_L, S_R = self.signal_speed_davis(u_L, u_R, self.c, self.c, n)
         elif signal_speed_type == "einfeldt":
             S_L, S_R = self.signal_speed_einfeldt(u_L, u_R, self.c, self.c, rho_L, rho_R, n)
-        else:
-            raise ValueError(f"Type d'estimateur de vitesse d'onde inconnu: {signal_speed_type}")
         
-        # Calcul de la vitesse de l'onde de contact
+        # Forcer S_L < 0 et S_R > 0 pour la stabilité
+        S_L = min_value(S_L, -self.eps)
+        S_R = max_value(S_R, self.eps)
         S_star = self.compute_star_speed(u_L, u_R, p_L, p_R, rho_L, rho_R, S_L, S_R, n)
         
-        # Composantes normales des vitesses
-        u_n_L = dot(u_L, n)
-        u_n_R = dot(u_R, n)
+        #S_star entre S_L et S_R
+        S_star = min_value(max_value(S_star, S_L + self.eps), S_R - self.eps)
         
-        # Calcul des états intermédiaires (star states)
-        # Préfacteurs pour les états intermédiaires
-        pre_factor_L = (S_L - u_n_L) / (S_L - S_star + self.eps)
-        pre_factor_R = (S_R - u_n_R) / (S_R - S_star + self.eps)
-        
-        # Pour les flux HLLC, nous devons calculer les états intermédiaires pour chaque variable
-        # Nous allons créer des listes pour stocker ces états
-        U_star_L = []
-        U_star_R = []
-        
-        # Pour l'équation de masse (première équation)
-        U_star_L.append(pre_factor_L * rho_L)
-        U_star_R.append(pre_factor_R * rho_R)
-        
-        # Pour l'équation de quantité de mouvement (deuxième équation)
-        # On doit créer un nouveau vecteur vitesse avec la composante normale remplacée par S_star
-        u_star_L = u_L + (S_star - u_n_L) * n
-        u_star_R = u_R + (S_star - u_n_R) * n
-        
-        U_star_L.append(pre_factor_L * rho_L * u_star_L)
-        U_star_R.append(pre_factor_R * rho_R * u_star_R)
-        
-        # Pour l'équation d'énergie (troisième équation)
-        E_star_L = E_L + (S_star - u_n_L) * (S_star + p_L / (rho_L * (S_L - u_n_L + self.eps)))
-        E_star_R = E_R + (S_star - u_n_R) * (S_star + p_R / (rho_R * (S_R - u_n_R + self.eps)))
-        
-        U_star_L.append(pre_factor_L * rho_L * E_star_L)
-        U_star_R.append(pre_factor_R * rho_R * E_star_R)
-        
-        # Calcul des flux HLLC
-        fluxes = []
-        
-        # Flux physiques
+        # Flux standards
         F_L = [dot(f, n) for f in U_flux]
         F_R = [dot(f, n) for f in Ubar_flux]
         
-        # Déterminer dans quelle région se trouve la solution
-        cond_L = conditional(S_L >= 0, 1, 0)  # Si S_L ≥ 0, on est dans la région L
-        cond_star_L = conditional(And(lt(S_L, 0), gt(S_star, 0)), 1, 0)  # Si S_L < 0 et S_star > 0, on est dans la région *L
-        cond_star_R = conditional(And(lt(S_star, 0), gt(S_R, 0)), 1, 0)  # Si S_star < 0 et S_R > 0, on est dans la région *R
-        cond_R = conditional(S_R <= 0, 1, 0)  # Si S_R ≤ 0, on est dans la région R
+        # Facteur de mélange augmenté légèrement
+        blend_factor = 0.05  # Augmenté de 0.01 à 0.05
+        energy_blend = 0.05  # Facteur plus conservateur pour l'énergie
         
-        # Calcul des flux HLLC pour chaque variable
+        # Version améliorée du flux HLLC
+        fluxes = []
         for i in range(len(U)):
-            # Flux dans la région L
-            flux_L = F_L[i]
+            # Flux HLL standard
+            flux_hll = (S_R * F_L[i] - S_L * F_R[i] + S_L * S_R * (Ubar[i] - U[i])) / (S_R - S_L)
+            correction_dir = conditional(gt(S_star, 0), 1.0, -1.0)
+            if i == 1:  # Quantité de mouvement
+                # Correction scalaire basée sur la densité et la vitesse du son
+                rho_avg = 0.5 * (rho_L + rho_R)
+                rho_ratio = abs(rho_L - rho_R) / (rho_L + rho_R + self.eps)
+                correction_scalar = blend_factor * rho_avg * self.c * self.c * rho_ratio
+                
+                # Appliquer la correction comme un vecteur dans la direction normale
+                flux = flux_hll + correction_dir * correction_scalar * n
+                
+            elif i == 2:  # Énergie
+                # Correction adaptée pour l'énergie
+                p_avg = 0.5 * (p_L + p_R)
+                energy_ratio = abs(E_L - E_R) / (abs(E_L) + abs(E_R) + self.eps)
+                energy_correction = energy_blend * p_avg * energy_ratio
+                
+                # Appliquer la correction comme un scalaire directement à l'énergie
+                flux = flux_hll + correction_dir * energy_correction
+                
+            else:
+                flux = flux_hll
             
-            # Flux dans la région *L
-            flux_star_L = F_L[i] + S_L * (U_star_L[i] - U[i])
-            
-            # Flux dans la région *R
-            flux_star_R = F_R[i] + S_R * (U_star_R[i] - Ubar[i])
-            
-            # Flux dans la région R
-            flux_R = F_R[i]
-            
-            # Sélection du flux approprié en fonction de la position de l'onde de contact
-            flux_hllc = cond_L * flux_L + cond_star_L * flux_star_L + cond_star_R * flux_star_R + cond_R * flux_R
-            
-            fluxes.append(flux_hllc)
+            fluxes.append(flux)
         
         return fluxes

@@ -41,16 +41,22 @@ class DucrosShockSensor(ShockSensor):
     """
     Implémentation du capteur de choc de Ducros.
     
-    Le capteur de Ducros utilise le rapport entre la divergence du champ de vitesse
+    Ce capteur utilise le rapport entre la divergence du champ de vitesse
     et la somme de la divergence et du rotationnel pour détecter les chocs.
     
     Dans les régions de choc, la divergence est élevée (compression forte),
     alors que dans les régions de turbulence, le rotationnel est élevé.
     
+    La formule du capteur est:
     fs = {1 si |div(v)| / (|div(v)| + |curl(v)| + ε) >= seuil
          0 sinon}
     
-    Références:
+    Parameters
+    ----------
+    problem : Problem Le problème sur lequel appliquer le capteur
+    threshold : float, optional Seuil de détection des chocs, par défaut 0.95
+        
+    References
     ----------
     Ducros, F., Ferrand, V., Nicoud, F., Weber, C., Darracq, D., Gacherieu, C., & Poinsot, T. (1999).
     "Large-Eddy Simulation of the Shock/Turbulence Interaction."

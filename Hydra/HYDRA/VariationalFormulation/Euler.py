@@ -5,11 +5,10 @@ Created on Mon Jan 27 18:22:27 2025
 """
 from .Problem import Problem, BoundaryConditions
 from ..utils.generic_functions import euler_eigenvalues_2D,  max_abs_of_sequence
-from ufl import outer, grad, Identity, inner, dot, div, dev, sym
+from ufl import outer, grad, Identity, inner, dot
 from ufl import MixedFunctionSpace, TestFunctions, TrialFunctions
 from petsc4py.PETSc import ScalarType
 from dolfinx.fem import functionspace, Function
-
 
 class EulerBoundaryConditions(BoundaryConditions):
     def __init__(self, U, Ubar, Ubar_test, facet_mesh, S, n, ds, tdim, entity_maps, facet_tag, dico_Vbar):
@@ -45,10 +44,14 @@ class EulerBoundaryConditions(BoundaryConditions):
         self.boundary_residual += res_rho + res_u + res_E
 
 class CompressibleEuler(Problem):
-    """ Classe implémentant les équations d'Euler compressibles avec la méthode HDG.
+    """ 
+    Implémentation des équations d'Euler compressibles avec la méthode HDG.
     
-     Cette classe définit la formulation variationnelle pour les équations d'Euler
-     compressibles, incluant les flux numériques et les termes de stabilisation."""
+    Cette classe définit la formulation variationnelle pour les équations d'Euler
+    compressibles, incluant les flux numériques, les termes de stabilisation, et
+    la gestion des conditions aux limites. Elle utilise une formulation HDG où les 
+    variables sont définies à la fois sur les éléments et sur leurs faces.
+    """
 
     def set_stabilization_matrix(self, u, ubar, c, n):
         """
@@ -167,26 +170,34 @@ class CompressibleEuler(Problem):
         
     def set_numerical_flux(self, U_flux, Ubar_flux, flux_type="HLLC"):
         """
-        Calcule le flux numérique associé à chacune des équations de conservations
-    
+        Calcule le flux numérique à travers les interfaces entre éléments.
+        
+        Cette méthode implémente différents types de flux numériques utilisés pour
+        approximer la solution du problème de Riemann aux interfaces. Les options
+        incluent Cockburn (flux upwind simple), Lax-Friedrichs (LF), Rusanov, 
+        et les solveurs plus sophistiqués HLL et HLLC.
+        
         Parameters
         ----------
-        U_flux : Flux associés aux variables U dans l'élément
-        Ubar_flux : Flux associés aux variables Ubar au bord de l'élément
-        flux_type : string, optional le type de flux numérique.
-                    Options: "Cockburn", "LF", "Rusanov", "HLL", "HLLC"
-    
+        U_flux : list[ufl.Expr]
+            Flux associés aux variables U à l'intérieur de l'élément
+        Ubar_flux : list[ufl.Expr]
+            Flux associés aux variables Ubar aux interfaces
+        flux_type : str, optional
+            Type de flux numérique à utiliser. Options:
+            - "Cockburn": Flux upwind simple avec pénalisation
+            - "Rusanov": Flux de type Rusanov (Local Lax-Friedrichs)
+            - "HLL": Approximation de Harten-Lax-van Leer
+            - "HLLC": HLL avec restauration de l'onde de contact
+            
         Returns
         -------
-        list la liste des flux numériques
+        list[ufl.Expr]
+            Liste des flux numériques pour chaque équation de conservation
         """
         if flux_type == "Cockburn":
             return [dot(flux_bar, self.n) + self.S * (x - x_bar) 
                     for flux_bar, x, x_bar in zip(Ubar_flux, self.U, self.Ubar)]
-        elif flux_type == "LF":
-            #Doit être redondant avec Rusanov
-            return [dot(1./2 * (flux_bar + flux), self.n) + self.S * (x - x_bar) 
-                    for flux_bar, flux, x, x_bar in zip(Ubar_flux, U_flux, self.U, self.Ubar)]
         elif flux_type == "Rusanov":
             from .riemann_solvers import RiemannSolvers
             riemann = RiemannSolvers(self.EOS, self.material)

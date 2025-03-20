@@ -88,6 +88,13 @@ class Solve:
         Fr_form = form(Fr, entity_maps=self.pb.entity_maps)
         J_form = form(J, entity_maps=self.pb.entity_maps)
         petsc_options = default_Newton_parameters()
+        petsc_options.update({
+            # Options générales pour MUMPS
+            "pc_factor_mat_solver_type": "mumps",
+            # Activer BLR (Block Low-Rank) pour MUMPS
+            "mat_mumps_icntl_35": 1,
+            "mat_mumps_cntl_7": 1e-8,
+        })
         
         self.solver = BlockedNewtonSolver(Fr_form, self.pb.u_list, J_form, bcs = self.pb.bc_class.bcs, 
                                           petsc_options=petsc_options, 
@@ -145,7 +152,7 @@ class Solve:
                 # Ajouter les contributions des étapes précédentes (si applicable)
                 for prev_stage in range(stage):
                     a_ij = self.dirk_params.A[stage, prev_stage]
-                    if a_ij != 0.0:  # Éviter les calculs inutiles
+                    if a_ij != 0.0:
                         prev_u = self.stage_solutions[prev_stage][i]
                         # K_j ≈ (prev_u - u_n) / dt
                         self.pb.U_base[i].x.array[:] += a_ij * (prev_u.x.array - u_n.x.array)

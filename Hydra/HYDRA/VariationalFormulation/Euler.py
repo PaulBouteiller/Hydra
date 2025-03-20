@@ -165,7 +165,7 @@ class CompressibleEuler(Problem):
         return -sum(inner(flux, grad(test_func)) * self.dx_c 
                     for flux, test_func in zip(U_flux, self.U_test))        
         
-    def set_numerical_flux(self, U_flux, Ubar_flux, flux_type="HLL"):
+    def set_numerical_flux(self, U_flux, Ubar_flux, flux_type="HLLC"):
         """
         Calcule le flux numérique associé à chacune des équations de conservations
     
@@ -196,7 +196,7 @@ class CompressibleEuler(Problem):
             riemann = RiemannSolvers(self.EOS, self.material)
             return riemann.hll_flux(self.U, self.Ubar, U_flux, Ubar_flux, self.n)
         elif flux_type == "HLLC":
-            raise ValueError("Currently buggued")
+            # raise ValueError("Currently buggued")
             from .riemann_solvers import RiemannSolvers
             riemann = RiemannSolvers(self.EOS, self.material)
             return riemann.hllc_flux(self.U, self.Ubar, U_flux, Ubar_flux, self.n)

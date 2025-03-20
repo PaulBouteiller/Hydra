@@ -8,10 +8,10 @@ from ..utils.default_parameters import default_Newton_parameters
 from ..Export.export_result import ExportResults
 from .customblockedNewton import BlockedNewtonSolver
 from .SNESBlock import BlockedSNESSolver
-# from .hybrid_blocked_newton import HybridBlockedNewtonSolver
 from ..utils.dirk_parameters import DIRKParameters
 from tqdm import tqdm
 from numpy import linspace, zeros_like
+from dolfinx.fem import form
 
 class Solve:
     """
@@ -87,13 +87,21 @@ class Solve:
         Fr = extract_rows(self.pb.residual, self.pb.u_test_list)
         J = derivative_block(Fr, self.pb.u_list, self.pb.du_list)
         
+        Fr_form = form(Fr, entity_maps=self.pb.entity_maps)
+            
+        J_form = form(J, entity_maps=self.pb.entity_maps)
         petsc_options = default_Newton_parameters()
+        # self.solver = BlockedNewtonSolver(Fr_form, self.pb.u_list, J_form, bcs = self.pb.bc_class.bcs, 
+        #                                   petsc_options=petsc_options, 
+        #                                   entity_maps = self.pb.entity_maps)
+        
         # self.solver = BlockedNewtonSolver(Fr, self.pb.u_list, J, bcs = self.pb.bc_class.bcs, 
-        #                                  petsc_options=petsc_options, 
-        #                                  entity_maps = self.pb.entity_maps)
-        self.solver = BlockedSNESSolver(Fr, self.pb.u_list, J, bcs = self.pb.bc_class.bcs, 
-                                         petsc_options=petsc_options, 
-                                         entity_maps = self.pb.entity_maps)
+        #                                   petsc_options=petsc_options, 
+        #                                   entity_maps = self.pb.entity_maps)
+        
+        
+        self.solver = BlockedSNESSolver(Fr_form, self.pb.u_list, J_form, bcs = self.pb.bc_class.bcs, 
+                                          petsc_options=petsc_options)
 
     def problem_solve(self):
         """

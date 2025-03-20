@@ -53,11 +53,8 @@ class BlockedNewtonSolver(NewtonSolver):
                 opts[k] = v
             opts.prefixPop()
             self.krylov_solver.setFromOptions()
-        self._F = form(F, form_compiler_options=form_compiler_options,
-                       jit_options=jit_options, entity_maps=entity_maps)
-            
-        self._a = form(J, form_compiler_options=form_compiler_options,
-                       jit_options=jit_options, entity_maps=entity_maps)
+        self._F = F
+        self._a = J
 
         self._bcs = bcs
         self._u = u

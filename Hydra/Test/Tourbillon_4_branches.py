@@ -21,7 +21,7 @@ Longueur = ratio * Largeur
 
 t_end = 6e-4
 
-dt = 2e-6
+dt = 1e-7
 num_time_steps = int(t_end/dt)
 
 class Square(CompressibleEuler):
@@ -35,7 +35,7 @@ class Square(CompressibleEuler):
     def prefix(self):
         if __name__ == "__main__": 
             # return "Vortex_BDF"
-            return "Vortex_DIRK"
+            return "Vortex_DIRK_snes"
         else:
             return "Test"
             
@@ -134,5 +134,5 @@ class Square(CompressibleEuler):
         return {"v" : True}
     
 pb = Square(Acier)
-# Solve(pb, TFin = t_end, dt = dt)
-Solve(pb, dirk_method="SDIRK212", TFin=t_end, dt=dt)
+Solve(pb, TFin = t_end, dt = dt)
+# Solve(pb, dirk_method="SDIRK212", TFin=t_end, dt=dt)

@@ -19,9 +19,9 @@ from dolfinx.cpp.mesh import cell_num_entities
 from petsc4py.PETSc import ScalarType
 from ..utils.MyExpression import MyConstant
 
-from dolfinx import log
+from dolfinx.log import set_log_level
 from dolfinx.cpp.log import LogLevel
-log.set_log_level(LogLevel.WARNING)
+set_log_level(LogLevel.WARNING)
 
 class BoundaryConditions:
     def __init__(self, U, Ubar, Ubar_test, facet_mesh, S, n, ds, tdim, entity_maps, facet_tag):
@@ -422,11 +422,9 @@ class Problem:
         
         Returns
         -------
-        Function
-            Fonction contenant la taille locale des éléments.
+        Function  Fonction contenant la taille locale des éléments.
         """
-        V = functionspace(self.mesh, ("DG", 0))
-        h_loc = Function(V, name="MeshSize")                
+        h_loc = Function(functionspace(self.mesh, ("DG", 0)), name="MeshSize")                
         
         # Calculer la taille locale des éléments
         tdim = self.tdim

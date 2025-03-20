@@ -7,6 +7,7 @@ from ..utils.block import extract_rows, derivative_block
 from ..utils.default_parameters import default_Newton_parameters
 from ..Export.export_result import ExportResults
 from .customblockedNewton import BlockedNewtonSolver
+from .SNESBlock import BlockedSNESSolver
 # from .hybrid_blocked_newton import HybridBlockedNewtonSolver
 from ..utils.dirk_parameters import DIRKParameters
 from tqdm import tqdm
@@ -27,8 +28,6 @@ class Solve:
         **kwargs : dict Arguments supplémentaires pour la configuration.
         """
         self.pb = problem
-        if "dirk_method" not in kwargs:
-            kwargs["dirk_method"] = "BDF1"  # Valeur par défaut pour DIRKSolve
         self.initialize_solve(problem, **kwargs)
         print("Start solving")       
         self.iterative_solve(**kwargs)
@@ -64,7 +63,7 @@ class Solve:
         Initialise les structures pour stocker les étapes intermédiaires.
         Pour Backward Euler (BDF1), il n'y a qu'une seule étape.
         """
-        self.num_stages = self.dirk_params.num_stages  # Pour BDF1, cela vaut 1
+        self.num_stages = self.dirk_params.num_stages
         self.stage_solutions = []
         for s in range(self.num_stages):
             # Cloner les fonctions de solution pour chaque étape
@@ -89,7 +88,10 @@ class Solve:
         J = derivative_block(Fr, self.pb.u_list, self.pb.du_list)
         
         petsc_options = default_Newton_parameters()
-        self.solver = BlockedNewtonSolver(Fr, self.pb.u_list, J, bcs = self.pb.bc_class.bcs, 
+        # self.solver = BlockedNewtonSolver(Fr, self.pb.u_list, J, bcs = self.pb.bc_class.bcs, 
+        #                                  petsc_options=petsc_options, 
+        #                                  entity_maps = self.pb.entity_maps)
+        self.solver = BlockedSNESSolver(Fr, self.pb.u_list, J, bcs = self.pb.bc_class.bcs, 
                                          petsc_options=petsc_options, 
                                          entity_maps = self.pb.entity_maps)
 
@@ -127,7 +129,6 @@ class Solve:
         """
         Sauvegarde l'état original du problème avant modification pour une étape DIRK.
         """
-        # Sauvegarder les solutions actuelles
         for i, u_base in enumerate(self.pb.U_base):
             self.temp_solutions[i].x.array[:] = u_base.x.array
     
@@ -167,22 +168,18 @@ class Solve:
         stage_time = self.stage_times[stage]
         stage_step = int(stage_time / (self.Tfin/self.num_time_steps))
         self.pb.update_bcs(stage_step)
-        
         for i in range(len(self.pb.bc_class.mcl)):            
             self.pb.bc_class.mcl[i].constant.value = self.pb.bc_class.mcl[i].value_array[stage_step]
             
     def solve_stage(self, stage):
         """
         Résout une étape spécifique du schéma DIRK.
-        
         Parameters
         ----------
-        stage : int
-            Numéro de l'étape à résoudre.
+        stage : int Numéro de l'étape à résoudre.
         """
         self.set_stage_system(stage)
-        self.problem_solve()  # Résoudre le système pour cette étape
-        
+        self.problem_solve()        
         # Stocker la solution pour cette étape
         for i, u in enumerate(self.pb.U_base):
             self.stage_solutions[stage][i].x.array[:] = u.x.array
@@ -274,10 +271,6 @@ class Solve:
     def iterative_solve(self, **kwargs):
         """
         Boucle temporelle principale.
-        
-        Parameters
-        ----------
-        **kwargs : dict  Arguments supplémentaires pour la configuration.
         """
         compteur_output = kwargs.get("compteur", 1)
         num_time_steps = self.num_time_steps

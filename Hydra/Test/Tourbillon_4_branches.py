@@ -21,7 +21,7 @@ Longueur = ratio * Largeur
 
 t_end = 6e-4
 
-dt = 1e-7
+dt = 1e-5
 num_time_steps = int(t_end/dt)
 
 class Square(CompressibleEuler):

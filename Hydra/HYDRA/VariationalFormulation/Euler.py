@@ -29,6 +29,20 @@ class EulerBoundaryConditions(BoundaryConditions):
                         - self.Ubar[1], self.Ubar_test[1]) * self.ds(tag)
         res_E = - inner(self.U[2] - self.Ubar[2], self.Ubar_test[2]) * self.ds(tag)
         self.boundary_residual += res_rho + res_u + res_E
+        
+    def wall_residual_with_rho(self, tag, normal):
+        if normal == "x":
+            sub = 0
+        elif normal == "y":
+            sub = 1
+        elif normal == "z":
+            sub = 2
+        self.add_component(self.V_vbar, sub, tag, ScalarType(0))
+        res_rho = - inner(self.U[0] - self.Ubar[0], self.Ubar_test[0]) * self.ds(tag)
+        res_u = - inner(self.U[1] - dot(self.U[1], self.n) * self.n 
+                        - self.Ubar[1], self.Ubar_test[1]) * self.ds(tag)
+        res_E = - inner(self.U[2] - self.Ubar[2], self.Ubar_test[2]) * self.ds(tag)
+        self.boundary_residual += res_rho + res_u + res_E
 
 class CompressibleEuler(Problem):
     """ Classe implémentant les équations d'Euler compressibles avec la méthode HDG.

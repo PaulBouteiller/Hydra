@@ -154,7 +154,26 @@ class BlockedNewtonSolver(NewtonSolver):
     def solve(self):
         """Solve non-linear problem into function. Returns the number
         of iterations and if the solver converged."""
-        set_log_level(LogLevel.WARNING)
+        # Créer des variables pour suivre les informations d'itération
+        iteration_info = {"current": 0, "initial_residual": None}
+        # Callback pour afficher l'itération et le résidu avant la résolution
+        def custom_pre_callback(solver):
+            solver._assemble_residual(solver._x, solver._b)
+            residual_norm = solver._b.norm()
+            if iteration_info["current"] == 0:
+                iteration_info["initial_residual"] = residual_norm
+            rel_residual = residual_norm / iteration_info["initial_residual"] if iteration_info["initial_residual"] else 0
+            print(f"Newton iteration {iteration_info['current']}: r (abs) = {residual_norm} (tol = 1e-10), r (rel) = {rel_residual} (tol = 1e-09)")
+            
+            # Incrémenter le compteur d'itérations
+            iteration_info["current"] += 1
+        
+        # Définir le nouveau callback
+        self.set_pre_solve_callback(custom_pre_callback)
+        set_log_level(LogLevel.WARNING)  # Supprimer les messages INFO
         n, converged = super().solve(self._x)
-        self._x.ghostUpdate(addv = InsertMode.INSERT, mode = ScatterMode.FORWARD)
+        self._x.ghostUpdate(addv=InsertMode.INSERT, mode=ScatterMode.FORWARD)
+        # Afficher un message de fin
+        print(f"Newton solver finished in {n} iterations and {n} linear solver iterations.")
+        
         return n, converged

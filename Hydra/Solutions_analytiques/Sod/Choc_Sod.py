@@ -10,13 +10,6 @@ import matplotlib.pyplot as plt
 ###### Modèle matériau ######
 gamma = 1.4  # rapport des chaleurs spécifiques (cas standard pour Sod)
 rho0 = 1.0   # densité de référence
-C = 1.0      # vitesse du son de référence
-
-
-
-##### NON il y a un problème avec la capacité thermique massique ici ????
-
-
 
 # Densités des deux régions
 rho_gauche = 1.0
@@ -25,25 +18,24 @@ rho_droite = 0.125
 # Pressions des deux régions
 p_gauche = 1.0
 p_droite = 0.1
-
-
         
 # Calcul de l'énergie interne spécifique (e) à partir de l'équation d'état du gaz parfait e = p/(rho*(gamma-1))
 e_gauche = p_gauche / (rho_gauche * (gamma - 1.0))
 e_droite = p_droite / (rho_droite * (gamma - 1.0))
 
-dico_eos = {"gamma": gamma, "e_max" : 2 * max(e_gauche, e_droite) }  # équation d'état de type gaz parfait
+dico_eos = {"gamma": gamma}  # équation d'état de type gaz parfait
 dico_devia = {}
 Gaz = Material(rho0, 1, "GP", None, dico_eos, dico_devia)
 
 # Paramètres de maillage et simulation
 Nx = 125   # nombre de cellules
-Largeur = 0.1
-Longueur = Nx * Largeur
+
+Longueur = 1
+Largeur = 0.1 / Nx
 
 # Paramètres temporels
-t_end = 2  # temps final classique pour Sod
-dt = 2.5e-2    # pas de temps
+t_end = 0.1  # temps final classique pour Sod
+dt = 2.5e-4    # pas de temps
 num_time_steps = int(t_end/dt)
 
 class SodShockTube(CompressibleEuler):
@@ -112,7 +104,6 @@ class SodShockTube(CompressibleEuler):
     def set_output(self):
         self.t_output_list = []
         return {}
-        # return {'rho': True}
         
     def query_output(self, t):
         self.t_output_list.append(t)
@@ -121,25 +112,66 @@ class SodShockTube(CompressibleEuler):
         # Variables à exporter 
         return {"rho": True, "Pressure":True}
     
-    def final_output(self):
-        df = read_csv("SodShockTube-results/rho.csv")
-        resultat = [df[colonne].to_numpy() for colonne in df.columns]
-        n_sortie = len(self.t_output_list)
-        # pas_espace = np.linspace(0, Longueur, Nx)
-        # for i, t in enumerate(self.t_output_list):
-        mask = resultat[1]<=1e-10
-        rho_array = resultat[-1][mask] 
-        x_array = resultat[0][mask]/Longueur
-        print(len(x_array))
-        # print("masque", mask)
-        plt.plot(x_array, rho_array, marker = "x")
-        plt.xlim(0, 1)
-        # plt.ylim(-1.1 * magnitude, 100)
-        plt.xlabel(r"Position (mm)", size = 18)
-        # plt.ylabel(r"Contrainte (MPa)", size = 18)
-        plt.legend()
-        plt.show()
-    
 pb = SodShockTube(Gaz)
-# Solve(pb, TFin = t_end, dt = dt)
-Solve(pb, dirk_method="SDIRK212", TFin=t_end, dt=dt)
+Solve(pb, dirk_method="BDF1", TFin=t_end, dt=dt)
+
+import sodshock_analytique
+
+# Paramètres de la simulation
+dustFrac = 0.0  # fraction de poussière (0 = gaz pur)
+npts = 500  # nombre de points pour la discrétisation
+left_state = (p_gauche, rho_gauche, 0)  # état gauche (pression, densité, vitesse)
+right_state = (p_droite, rho_droite, 0.)  # état droit (pression, densité, vitesse)
+
+# Calculer la solution
+positions, regions, values = sodshock_analytique.solve(
+    left_state=left_state, 
+    right_state=right_state, 
+    geometry=(0., 1., 0.5),  # frontières gauche, droite et position du choc
+    t=t_end, 
+    gamma=gamma, 
+    npts=npts, 
+    dustFrac=dustFrac
+)
+
+# Afficher les positions des différentes caractéristiques
+print('Positions:')
+for desc, vals in positions.items():
+    print('{0:10} : {1}'.format(desc, vals))
+
+# Afficher les valeurs dans les différentes régions
+print('Regions:')
+for region, vals in sorted(regions.items()):
+    print('{0:10} : {1}'.format(region, vals))
+
+# Tracer les résultats
+f, axarr = plt.subplots(2, sharex=True)
+
+
+rho_df = read_csv("SodShockTube-results/rho.csv")
+rho_result = [rho_df[colonne].to_numpy() for colonne in rho_df.columns]
+mask = rho_result[1]<=1e-10
+rho_array = rho_result[-1][mask] 
+x_array = rho_result[0][mask]
+
+
+p_df = read_csv("SodShockTube-results/Pressure.csv")
+p_result = [p_df[colonne].to_numpy() for colonne in p_df.columns]
+mask_p = p_result[1]<=1e-10
+p_array = p_result[-1][mask_p] 
+xp_array = p_result[0][mask_p]
+
+
+axarr[0].plot(values['x'], values['p'], linewidth=1.5, color='b')
+axarr[0].plot(xp_array, p_array, linewidth=1.5, color='g')
+axarr[0].set_ylabel('pressure')
+axarr[0].set_ylim(0, 1.1)
+
+axarr[1].plot(values['x'], values['rho'], linewidth=1.5, color='r')
+axarr[1].plot(x_array, rho_array, linewidth=1.5, color='g')
+axarr[1].set_ylabel('density')
+axarr[1].set_ylim(0, 1.1)
+
+plt.suptitle('Shocktube results at t={0}\ndust fraction = {1}, gamma={2}'
+             .format(t_end, dustFrac, gamma))
+plt.show()

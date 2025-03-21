@@ -104,12 +104,10 @@ class GP_EOS:
         """
         try:
             self.gamma = dico["gamma"]
-            self.e_max = dico["e_max"]
         except KeyError:
             raise ValueError("La loi d'état du gaz parfait n'est pas correctement définie")
 
         print("Le coefficient polytropique vaut", self.gamma)
-        print("Une estimation de la température maximale est", self.e_max)
         
     def celerity(self, rho_0):
         """

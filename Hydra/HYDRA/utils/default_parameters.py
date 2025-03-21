@@ -9,7 +9,7 @@ def default_fem_degree():
     """
     Degré d'interpolation par défaut du champ de déplacement
     """
-    return 1
+    return 2
 
 def default_fem_parameters():
     """
@@ -19,17 +19,6 @@ def default_fem_parameters():
     fem.update({"u_degree" : default_fem_degree()})
     fem.update({"schema" : "default"})
     return fem
-
-def default_damping_parameters():
-    """
-    Paramètres par défaut de la pseudo-viscosité.
-    """
-    damp = {}
-    damp.update({"damping" : True})
-    damp.update({"linear_coeff" : 0.1})
-    damp.update({"quad_coeff" : 0.1})
-    damp.update({"correction" : True})
-    return damp
 
 def default_Newton_parameters():
     solver_u = {}

@@ -12,7 +12,7 @@ from dolfinx.fem import functionspace, Function
 
 class EulerBoundaryConditions(BoundaryConditions):
     def __init__(self, U, Ubar, Ubar_test, facet_mesh, S, n, ds, tdim, entity_maps, facet_tag, dico_Vbar):
-        self.V_vbar = dico_Vbar.get("Velocity")
+        self.V_vbar, self.V_rhobar = dico_Vbar.get("Velocity"), dico_Vbar.get("Density")
         super().__init__(U, Ubar, Ubar_test, facet_mesh, S, n, ds, tdim, entity_maps, facet_tag)
     
     def wall_residual(self, tag, normal):
@@ -29,7 +29,7 @@ class EulerBoundaryConditions(BoundaryConditions):
         res_E = - inner(self.U[2] - self.Ubar[2], self.Ubar_test[2]) * self.ds(tag)
         self.boundary_residual += res_rho + res_u + res_E
         
-    def wall_residual_with_rho(self, tag, normal):
+    def wall_residual_with_rho(self, tag, normal, value):
         if normal == "x":
             sub = 0
         elif normal == "y":
@@ -37,6 +37,7 @@ class EulerBoundaryConditions(BoundaryConditions):
         elif normal == "z":
             sub = 2
         self.add_component(self.V_vbar, sub, tag, ScalarType(0))
+        self.add_component(self.V_rhobar, None, tag, ScalarType(value))
         res_rho = - inner(self.U[0] - self.Ubar[0], self.Ubar_test[0]) * self.ds(tag)
         res_u = - inner(self.U[1] - dot(self.U[1], self.n) * self.n 
                         - self.Ubar[1], self.Ubar_test[1]) * self.ds(tag)
@@ -100,7 +101,7 @@ class CompressibleEuler(Problem):
         self.Ubar = [self.rhobar, self.rhobar * self.ubar, self.rhobar * self.Ebar]
         self.U_n = [self.rho_n, self.rho_n * self.u_n, self.rho_n * self.E_n]
         
-        self.dico_Vbar = {"Velocity" : self.V_vbar}
+        self.dico_Vbar = {"Density" : self.V_rhobar, "Velocity" : self.V_vbar}
         
     def set_variable_to_solve(self):
         if self.iso_T:
@@ -168,7 +169,7 @@ class CompressibleEuler(Problem):
         return -sum(inner(flux, grad(test_func)) * self.dx_c 
                     for flux, test_func in zip(U_flux, self.U_test))        
         
-    def set_numerical_flux(self, U_flux, Ubar_flux, flux_type="HLLC"):
+    def set_numerical_flux(self, U_flux, Ubar_flux, flux_type="HLL"):
         """
         Calcule le flux numérique à travers les interfaces entre éléments.
         

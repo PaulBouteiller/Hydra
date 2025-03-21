@@ -4,6 +4,7 @@ Created on Fri Mar  7 15:57:50 2025
 @author: bouteillerp
 """
 from ufl import sqrt, dot, conditional, gt, max_value, min_value
+from ..utils.generic_functions import extract_primitive_variables
 
 class RiemannSolvers:
     """
@@ -38,16 +39,10 @@ class RiemannSolvers:
         material : Material 
         """
         self.EOS = EOS
-        self.c = material.celerity
+        self.c = material.c
+        self.c_bar = material.c_bar
         self.material = material
-        self.eps = 1e-10  # Valeur epsilon pour éviter les divisions par zéro
-        
-    def extract_primitive_variables(self, U):
-        rho = U[0]
-        u = U[1] / rho
-        E = U[2] / rho
-        return rho, u, E
-        
+        self.eps = 1e-10  # Valeur epsilon pour éviter les divisions par zéro        
         
     def signal_speed_davis(self, u_L, u_R, c_L, c_R, n):
         """
@@ -144,8 +139,8 @@ class RiemannSolvers:
         -------
         fluxes : Liste Flux numériques de Rusanov pour chaque variable
         """
-        rho_L, u_L, _ = self.extract_primitive_variables(U)
-        rho_R, u_R, _ = self.extract_primitive_variables(Ubar)
+        rho_L, u_L, _ = extract_primitive_variables(U)
+        rho_R, u_R, _ = extract_primitive_variables(Ubar)
         
         # Composantes normales des vitesses
         u_n_L = dot(u_L, n)
@@ -180,14 +175,14 @@ class RiemannSolvers:
         -------
         fluxes : Liste  Flux numériques HLL pour chaque variable
         """
-        rho_L, u_L, _ = self.extract_primitive_variables(U)
-        rho_R, u_R, _ = self.extract_primitive_variables(Ubar)
+        rho_L, u_L, _ = extract_primitive_variables(U)
+        rho_R, u_R, _ = extract_primitive_variables(Ubar)
 
         # Calcul des vitesses d'onde
         if signal_speed_type == "davis":
-            S_L, S_R = self.signal_speed_davis(u_L, u_R, self.c, self.c, n)
+            S_L, S_R = self.signal_speed_davis(u_L, u_R, self.c, self.c_bar, n)
         elif signal_speed_type == "einfeldt":
-            S_L, S_R = self.signal_speed_einfeldt(u_L, u_R, self.c, self.c, rho_L, rho_R, n)
+            S_L, S_R = self.signal_speed_einfeldt(u_L, u_R, self.c, self.c_bar, rho_L, rho_R, n)
         else:
             raise ValueError(f"Type d'estimateur de vitesse d'onde inconnu: {signal_speed_type}")
         
@@ -206,8 +201,8 @@ class RiemannSolvers:
         return fluxes
         
     def hllc_flux(self, U, Ubar, U_flux, Ubar_flux, n, signal_speed_type="davis"):
-        rho_L, u_L, E_L = self.extract_primitive_variables(U)
-        rho_R, u_R, E_R = self.extract_primitive_variables(Ubar)
+        rho_L, u_L, E_L = extract_primitive_variables(U)
+        rho_R, u_R, E_R = extract_primitive_variables(Ubar)
         
         # Calcul des pressions
         p_L = self.EOS.set_eos(rho_L, u_L, E_L, self.material)
@@ -215,9 +210,9 @@ class RiemannSolvers:
 
         # Calcul des vitesses d'onde
         if signal_speed_type == "davis":
-            S_L, S_R = self.signal_speed_davis(u_L, u_R, self.c, self.c, n)
+            S_L, S_R = self.signal_speed_davis(u_L, u_R, self.c, self.c_bar, n)
         elif signal_speed_type == "einfeldt":
-            S_L, S_R = self.signal_speed_einfeldt(u_L, u_R, self.c, self.c, rho_L, rho_R, n)
+            S_L, S_R = self.signal_speed_einfeldt(u_L, u_R, self.c, self.c_bar, rho_L, rho_R, n)
         
         # Forcer S_L < 0 et S_R > 0 pour la stabilité
         S_L = min_value(S_L, -self.eps)

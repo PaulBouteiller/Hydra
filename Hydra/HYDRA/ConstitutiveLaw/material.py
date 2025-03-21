@@ -28,9 +28,6 @@ class Material:
         self.eos = self.eos_selection(self.eos_type)(dico_eos)
         self.devia = self.deviatoric_selection(self.dev_type)(dico_devia)
         self.celerity = self.eos.celerity(rho_0)
-       
-        self.e_activation = kwargs.get("e_activation", None)
-        self.kin_pref = kwargs.get("kin_pref", None)
         
         print("La capacité thermique vaut", self.C_mass)        
         print("La masse volumique vaut", self.rho_0)
@@ -50,8 +47,6 @@ class Material:
             return U_EOS
         elif eos_type == "GP":
             return GP_EOS
-        elif eos_type == "NewtonianFluid":
-            return NewtonianFluid_EOS
         else:
             raise ValueError("Equation d'état inconnue")
         
@@ -120,38 +115,7 @@ class GP_EOS:
         """
         Renvoie une estimation de la célérité des ondes accoustiques
         """
-        return sqrt(self.gamma * (self.gamma - 1) * self.e_max)
-    
-class NewtonianFluid_EOS:
-    def __init__(self, dico):
-        """
-        Défini un objet possédant des 
-        caractéristiques mécanique d'un fluide Newtobien
-
-        Parameters
-        ----------
-        k : TYPE
-            DESCRIPTION.
-        mu : TYPE
-            DESCRIPTION.
-        alpha : TYPE
-            DESCRIPTION.
-        chiT : TYPE
-            DESCRIPTION.
-        """
-        try:
-            self.k = dico["k"]
-            self.alpha = dico["alpha"]
-            self.chiT = dico["chiT"]
-        except KeyError:
-            raise ValueError("La loi d'état du fluide Newtonien n'est pas correctement définie")
-        
-        print("La viscosité de volumique est", self.k)
-        print("Le coefficient de conductivité thermique vaut", self.alpha)
-        print("La compréssibilité à température constante", self.chiT)
-        
-    def celerity(self, rho_0):
-        return sqrt(1/(self.chiT * rho_0))
+        return
 
 class None_deviatoric:
     def __init__(self, dico):

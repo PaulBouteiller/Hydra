@@ -4,7 +4,8 @@ Created on Thu Jun 23 10:47:33 2022
 @author: bouteillerp
 """
 
-from ufl import dot
+from ufl import dot, sqrt
+from..utils.generic_functions import extract_primitive_variables
 
 class EOS:
     def __init__(self, kinematic, quadrature):
@@ -23,12 +24,6 @@ class EOS:
     def set_eos(self, rho, u, E, mat):
         """
         Renvoie l'expression de la pression
-        Parameters
-        ----------
-        J : Jacobien de la transformation.
-        mat : Objet de la classe material.
-        T : champ de température actuelle
-        T0 : champ de température initiale
 
         Returns
         -------
@@ -42,3 +37,17 @@ class EOS:
         else:
             raise ValueError("Unknwon eos")
         return p
+    
+    def set_celerity(self, U, mat):
+        """
+        Renvoie l'expression de la célérité des ondes
+        """
+        rho, u, E = extract_primitive_variables(U)
+        eos_param = mat.eos
+        if mat.eos_type == "U1":
+            mat.celerity
+        elif mat.eos_type == "GP":
+            c = sqrt(eos_param.gamma * (eos_param.gamma - 1) * (E - 1./2 * dot(u, u)))
+        else:
+            raise ValueError("Unknwon eos")
+        return c

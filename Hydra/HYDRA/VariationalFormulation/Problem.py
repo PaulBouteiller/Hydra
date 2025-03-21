@@ -135,15 +135,18 @@ class Problem:
         self.set_variable_to_solve()
         self.set_test_functions()
         self.set_stabilization_parameters(**kwargs)
-        self.set_artifial_pressure()
+
 
             
         # Constitutive Law
         self.EOS = EOS(None, None)
+        self.material.c = self.EOS.set_celerity(self.U, self.material)
+        self.material.c_bar = self.EOS.set_celerity(self.U, self.material)
+        self.set_artifial_pressure()
         self.set_auxiliary_field()
         
         #Boundary conditions
-        self.S = self.set_stabilization_matrix(self.u, self.ubar, self.material.celerity, self.n)
+        self.S = self.set_stabilization_matrix(self.u, self.ubar, self.material.c, self.n)
         self.bc_class = self.boundary_conditions_class()(
                         self.U, self.Ubar, self.Ubar_test,
                         self.facet_mesh, self.S, self.n, self.ds_c,
@@ -439,5 +442,8 @@ class Problem:
     
     def set_artifial_pressure(self):
         from ..ConstitutiveLaw.artificial_pressure import ArtificialPressure
+        from ..utils.generic_functions import extract_primitive_variables
+        rho, u, E = extract_primitive_variables(self.U)
         h = self.calculate_mesh_size()
-        self.artificial_pressure = ArtificialPressure(self.U, self.V_rho, h, self.material.celerity, self.deg, self.shock_sensor)
+        c = self.EOS.set_celerity(self.U, self.material)
+        self.artificial_pressure = ArtificialPressure(self.U, self.V_rho, h, c, self.deg, self.shock_sensor)

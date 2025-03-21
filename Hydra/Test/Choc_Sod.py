@@ -14,6 +14,10 @@ C = 1.0      # vitesse du son de référence
 
 
 
+##### NON il y a un problème avec la capacité thermique massique ici ????
+
+
+
 # Densités des deux régions
 rho_gauche = 1.0
 rho_droite = 0.125
@@ -22,7 +26,6 @@ rho_droite = 0.125
 p_gauche = 1.0
 p_droite = 0.1
 
-        
 
         
 # Calcul de l'énergie interne spécifique (e) à partir de l'équation d'état du gaz parfait e = p/(rho*(gamma-1))
@@ -31,16 +34,16 @@ e_droite = p_droite / (rho_droite * (gamma - 1.0))
 
 dico_eos = {"gamma": gamma, "e_max" : 2 * max(e_gauche, e_droite) }  # équation d'état de type gaz parfait
 dico_devia = {}
-Gaz = Material(rho0, C, "GP", None, dico_eos, dico_devia)
+Gaz = Material(rho0, 1, "GP", None, dico_eos, dico_devia)
 
 # Paramètres de maillage et simulation
-Nx = 80   # nombre de cellules
+Nx = 125   # nombre de cellules
 Largeur = 0.1
 Longueur = Nx * Largeur
 
 # Paramètres temporels
-t_end = 0.2  # temps final classique pour Sod
-dt = 1e-2    # pas de temps
+t_end = 2  # temps final classique pour Sod
+dt = 2.5e-2    # pas de temps
 num_time_steps = int(t_end/dt)
 
 class SodShockTube(CompressibleEuler):
@@ -73,7 +76,6 @@ class SodShockTube(CompressibleEuler):
         """
         # Position du diaphragme
         x_diaphragme = Longueur * 0.5
-
         
         # Calcul de l'énergie totale spécifique (E = e + 0.5*u^2) pour chaque région
         # Ici u=0, donc E = e
@@ -109,14 +111,15 @@ class SodShockTube(CompressibleEuler):
 
     def set_output(self):
         self.t_output_list = []
-        return {'rho': True}
+        return {}
+        # return {'rho': True}
         
     def query_output(self, t):
         self.t_output_list.append(t)
     
     def csv_output(self):
         # Variables à exporter 
-        return {"rho": True}
+        return {"rho": True, "Pressure":True}
     
     def final_output(self):
         df = read_csv("SodShockTube-results/rho.csv")
@@ -124,12 +127,19 @@ class SodShockTube(CompressibleEuler):
         n_sortie = len(self.t_output_list)
         # pas_espace = np.linspace(0, Longueur, Nx)
         # for i, t in enumerate(self.t_output_list):
-        plt.plot(resultat[0]/Longueur, resultat[-1], linestyle = "--")
+        mask = resultat[1]<=1e-10
+        rho_array = resultat[-1][mask] 
+        x_array = resultat[0][mask]/Longueur
+        print(len(x_array))
+        # print("masque", mask)
+        plt.plot(x_array, rho_array, marker = "x")
         plt.xlim(0, 1)
         # plt.ylim(-1.1 * magnitude, 100)
         plt.xlabel(r"Position (mm)", size = 18)
         # plt.ylabel(r"Contrainte (MPa)", size = 18)
         plt.legend()
+        plt.show()
     
 pb = SodShockTube(Gaz)
-Solve(pb, TFin = t_end, dt = dt)
+# Solve(pb, TFin = t_end, dt = dt)
+Solve(pb, dirk_method="SDIRK212", TFin=t_end, dt=dt)

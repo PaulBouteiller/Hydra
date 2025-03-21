@@ -9,7 +9,7 @@ def default_fem_degree():
     """
     Degré d'interpolation par défaut du champ de déplacement
     """
-    return 3
+    return 1
 
 def default_fem_parameters():
     """

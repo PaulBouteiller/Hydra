@@ -61,7 +61,7 @@ class OptimizedCSVExport:
     def setup_pressure_export(self):
         if "Pressure" in self.dico_csv:
             self.csv_export_P = True
-            V_p = self.pb.V_quad_UD
+            V_p = self.pb.V_rho
             self.p_dte = self.dofs_to_exp(V_p, self.dico_csv.get("Pressure"))
             self.coordinate_data["Pressure"] = self.get_coordinate_data(V_p, self.p_dte)
         else:

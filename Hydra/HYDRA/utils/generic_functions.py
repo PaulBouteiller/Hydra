@@ -1,6 +1,8 @@
 from ufl import max_value as Max
 from ufl.core.expr import Expr
 from ufl import dot
+from mpi4py import MPI
+from numpy import asarray, int32, zeros
 
 def euler_eigenvalues_2D(v, n, c):
     """
@@ -70,6 +72,11 @@ def map_ufl_operator_to_sequence(a, op):
         alpha = op(alpha, a[j])
     return alpha
 
+def extract_primitive_variables(U):
+    rho = U[0]
+    u = U[1] / rho
+    E = U[2] / rho
+    return rho, u, E
     
 def gather_function(u):
     """

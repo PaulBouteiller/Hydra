@@ -306,7 +306,7 @@ class Solve:
                 self.compute_final_solution()
                 
                 # Mettre à jour les champs (pression artificielle, etc.)
-                self.pb.artificial_pressure.compute_artificial_pressure()
+                # self.pb.artificial_pressure.compute_artificial_pressure()
                 
                 # Incrémenter et exporter
                 j += 1

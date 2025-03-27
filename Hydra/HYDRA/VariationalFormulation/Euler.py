@@ -87,6 +87,8 @@ class CompressibleEuler(Problem):
         self.rhou = Function(self.V_v, name = "Momentum")
         self.rhoE = Function(self.V_rho, name = "Energy density")
         self.rho_n, self.rhou_n, self.rhoE_n = Function(self.V_rho), Function(self.V_v), Function(self.V_rho)
+        
+        self.s_rho, self.s_rhou, self.s_rhoE = Function(self.V_rho), Function(self.V_v), Function(self.V_rho)
 
         self.rhobar, self.rhoubar, self.rhoEbar = Function(self.V_rhobar), Function(self.V_vbar), Function(self.V_rhobar)
 
@@ -97,6 +99,7 @@ class CompressibleEuler(Problem):
         self.U = [self.rho, self.rhou, self.rhoE]
         self.Ubar = [self.rhobar, self.rhoubar, self.rhoEbar]
         self.U_n = [self.rho_n, self.rhou_n, self.rhoE_n]
+        self.s = [self.s_rho, self.s_rhou, self.s_rhoE]
         
         self.dico_Vbar = {"Density" : self.V_rhobar, "Velocity" : self.V_vbar}
         
@@ -164,8 +167,8 @@ class CompressibleEuler(Problem):
         return sum(inner(x * self.dt_factor, x_test) * self.dx_c 
                    for x, x_test in zip(self.U, self.U_test))
     
-    def set_dynamic_rhs(self, s_list):
-        return sum(inner(s, x_test) * self.dx_c  for s, x_test in zip(s_list, self.U_test))
+    def set_dynamic_source(self):
+        return sum(inner(s, x_test) * self.dx_c for s, x_test in zip(self.s, self.U_test))
     
     def set_volume_residual(self, U_flux):
         """Renvoie le résidu volumique"""
@@ -266,5 +269,10 @@ class CompressibleEuler(Problem):
         surf_res = self.total_surface_residual(U_flux, Ubar_flux)
         boundary_res = self.bc_class.boundary_residual
         self.residual = vol_res + surf_res + boundary_res
-        if self.analysis == "dynamic":
-            self.residual += self.set_dynamic_residual()
+        
+        
+        self.residual+= self.set_dynamic_lhs()
+        self.residual-=self.set_dynamic_source()
+        
+        # if self.analysis == "dynamic":
+        #     self.residual += self.set_dynamic_residual()

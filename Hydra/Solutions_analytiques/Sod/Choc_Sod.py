@@ -28,9 +28,9 @@ dico_devia = {}
 Gaz = Material(rho0, 1, "GP", None, dico_eos, dico_devia)
 
 #Degré d'interpolation #~Volumes finis si degré 0.
-degree = 3
+degree = 0
     
-Nx = int(1000 / (degree + 1))
+Nx = int(500 / (degree + 1))
 
 Longueur = 1
 Largeur = 0.1 / Nx
@@ -115,6 +115,7 @@ class SodShockTube(CompressibleEuler):
     
 pb = SodShockTube(Gaz)
 Solve(pb, dirk_method="BDF1", TFin=t_end, dt=dt)
+# Solve(pb, dirk_method="SDIRK5", TFin=t_end, dt=dt)
 
 import sod_shock_analytic
 

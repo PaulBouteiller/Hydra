@@ -146,7 +146,7 @@ class Problem:
         self.set_auxiliary_field()
         
         #Boundary conditions
-        self.S = self.set_stabilization_matrix(self.u, self.ubar, self.material.c, self.n)
+        self.S = self.set_stabilization_matrix(self.U, self.Ubar, self.material.c, self.n)
         self.bc_class = self.boundary_conditions_class()(
                         self.U, self.Ubar, self.Ubar_test,
                         self.facet_mesh, self.S, self.n, self.ds_c,
@@ -369,8 +369,8 @@ class Problem:
         Initialise quelques champs auxiliaires qui permettent d'écrire de 
         manière plus concise le problème thermo-mécanique
         """
-        rho, u, E = self.U[0], self.U[1]/self.U[0], self.U[2]/self.U[0]
-        p = self.EOS.set_eos(rho, u, E, self.material)
+        # rho, u, E = self.U[0], self.U[1]/self.U[0], self.U[2]/self.U[0]
+        p = self.EOS.set_eos(self.U, self.material)
         self.p_expr = Expression(p, self.V_rho.element.interpolation_points())
         self.p_func = Function(self.V_rho, name = "Pression")
         

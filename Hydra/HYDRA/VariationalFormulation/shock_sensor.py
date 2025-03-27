@@ -7,6 +7,8 @@ Created on Fri Mar  7 11:10:20 2025
 from ufl import div, curl, sqrt, conditional, ge, inner
 from dolfinx.fem import Function, functionspace
 
+from..utils.generic_functions import extract_primitive_variables
+
 class ShockSensor:
     """
     Classe abstraite pour les capteurs de choc dans HYDRA.
@@ -84,7 +86,7 @@ class DucrosShockSensor(ShockSensor):
         -------
         Function L'indicateur de choc (1 où des chocs sont détectés, 0 ailleurs).
         """
-        u = self.problem.u
+        _, u, _ = extract_primitive_variables(self.problem.U)
         velocity_div = div(u)
         velocity_curl = curl(u)
         

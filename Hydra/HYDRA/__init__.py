@@ -14,7 +14,6 @@ from .utils.default_parameters import *
 from .utils.generic_functions import plot_mesh
 from .ConstitutiveLaw.material import *
 from .VariationalFormulation.Euler import CompressibleEuler
-from .VariationalFormulation.EulerIdealMHD import CompressibleMHDEuler
 from .VariationalFormulation.NavierStokes import CompressibleNavierStokes
 
 from .utils.MyExpression import MyConstant

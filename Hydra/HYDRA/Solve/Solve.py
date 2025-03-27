@@ -67,7 +67,7 @@ class Solve:
         for s in range(self.num_stages):
             # Cloner les fonctions de solution pour chaque étape
             stage_u = []
-            for u_base in self.pb.U_base:
+            for u_base in self.pb.U:
                 u_stage = u_base.copy()
                 stage_u.append(u_stage)
             
@@ -75,15 +75,15 @@ class Solve:
         
         # Conserver les solutions temporaires pour le calcul des étapes
         self.temp_solutions = []
-        for u_base in self.pb.U_base:
+        for u_base in self.pb.U:
             temp_u = u_base.copy()
             self.temp_solutions.append(temp_u)
             
-        # Conserver les solutions temporaires pour le calcul des étapes
-        self.rhs_functions = [Function()]
-        for u_base in self.pb.U_base:
-            temp_u = u_base.copy()
-            self.temp_solutions.append(temp_u)
+        # # Conserver les solutions temporaires pour le calcul des étapes
+        # self.rhs_functions = [Function()]
+        # for u_base in self.pb.U:
+        #     temp_u = u_base.copy()
+        #     self.temp_solutions.append(temp_u)
         
     def set_solver(self):
         """
@@ -141,7 +141,7 @@ class Solve:
         """
         Sauvegarde l'état original du problème avant modification pour une étape DIRK.
         """
-        for i, u_base in enumerate(self.pb.U_base):
+        for i, u_base in enumerate(self.pb.U):
             self.temp_solutions[i].x.array[:] = u_base.x.array
     
     def calculate_stage_initial_approximation(self, stage):
@@ -149,9 +149,9 @@ class Solve:
         Calcule l'approximation initiale pour une étape du schéma DIRK.
         Pour BDF1, il s'agit simplement de la solution du pas de temps précédent.
         """
-        for i, u_n in enumerate(self.pb.Un_base):
+        for i, u_n in enumerate(self.pb.U_n):
             # Commencer par la solution au pas de temps précédent
-            self.pb.U_base[i].x.array[:] = u_n.x.array.copy()
+            self.pb.U[i].x.array[:] = u_n.x.array.copy()
             
             # Pour BDF1, nous n'avons pas besoin d'ajouter d'autres contributions
             if self.dirk_method != "BDF1":
@@ -161,7 +161,7 @@ class Solve:
                     if a_ij != 0.0:
                         prev_u = self.stage_solutions[prev_stage][i]
                         # K_j ≈ (prev_u - u_n) / dt
-                        self.pb.U_base[i].x.array[:] += a_ij * (prev_u.x.array - u_n.x.array)
+                        self.pb.U[i].x.array[:] += a_ij * (prev_u.x.array - u_n.x.array)
     
     def configure_stage_residual(self, stage):
         """
@@ -182,40 +182,40 @@ class Solve:
         for i in range(len(self.pb.bc_class.mcl)):            
             self.pb.bc_class.mcl[i].constant.value = self.pb.bc_class.mcl[i].value_array[stage_step]
             
-    def new_configure_stage_residual(self, stage):
-        """
-        Configure le résidu pour une étape spécifique du schéma DIRK.
+    # def new_configure_stage_residual(self, stage):
+    #     """
+    #     Configure le résidu pour une étape spécifique du schéma DIRK.
         
-        Parameters
-        ----------
-        stage : int  Numéro de l'étape.
-        """
-        # Pour cette étape, on modifie le facteur du terme temporel pour le dynamic_lhs
-        a_ii = self.dirk_params.A[stage, stage]
-        self.pb.dt_factor.value = 1.0 / (self.dt * a_ii)
+    #     Parameters
+    #     ----------
+    #     stage : int  Numéro de l'étape.
+    #     """
+    #     # Pour cette étape, on modifie le facteur du terme temporel pour le dynamic_lhs
+    #     a_ii = self.dirk_params.A[stage, stage]
+    #     self.pb.dt_factor.value = 1.0 / (self.dt * a_ii)
         
         
-        for i, u_n in enumerate(self.pb.Un_base):
-            a_ii = self.dirk_params.A[stage, stage]
-            stage_u = self.stage_solutions[stage][i]
-            z_i = (stage_u.x.array - u_n.x.array) / (self.dt * a_ii)
+    #     for i, u_n in enumerate(self.pb.U_n):
+    #         a_ii = self.dirk_params.A[stage, stage]
+    #         stage_u = self.stage_solutions[stage][i]
+    #         z_i = (stage_u.x.array - u_n.x.array) / (self.dt * a_ii)
             
-            # Soustraire les contributions des étapes précédentes
-            if stage > 0:
-                for prev_stage in range(stage):
-                    a_ij = self.dirk_params.A[stage, prev_stage]
-                    if abs(a_ij) > 1e-14:  # Ignorer les contributions nulles
-                        prev_z = z_stage[prev_stage][i]
-                        z_i -= (a_ij / a_ii) * prev_z
+    #         # Soustraire les contributions des étapes précédentes
+    #         if stage > 0:
+    #             for prev_stage in range(stage):
+    #                 a_ij = self.dirk_params.A[stage, prev_stage]
+    #                 if abs(a_ij) > 1e-14:  # Ignorer les contributions nulles
+    #                     prev_z = z_stage[prev_stage][i]
+    #                     z_i -= (a_ij / a_ii) * prev_z
 
-        self.pb.s.x.array = u_n.x.array / (self.dt * a_ii)
+    #     self.pb.s.x.array = u_n.x.array / (self.dt * a_ii)
         
-        # Mettre à jour les conditions aux limites pour le temps intermédiaire
-        stage_time = self.stage_times[stage]
-        stage_step = int(stage_time / (self.Tfin/self.num_time_steps))
-        self.pb.update_bcs(stage_step)
-        for i in range(len(self.pb.bc_class.mcl)):            
-            self.pb.bc_class.mcl[i].constant.value = self.pb.bc_class.mcl[i].value_array[stage_step]
+    #     # Mettre à jour les conditions aux limites pour le temps intermédiaire
+    #     stage_time = self.stage_times[stage]
+    #     stage_step = int(stage_time / (self.Tfin/self.num_time_steps))
+    #     self.pb.update_bcs(stage_step)
+    #     for i in range(len(self.pb.bc_class.mcl)):            
+    #         self.pb.bc_class.mcl[i].constant.value = self.pb.bc_class.mcl[i].value_array[stage_step]
             
     def solve_stage(self, stage):
         """
@@ -227,7 +227,7 @@ class Solve:
         self.set_stage_system(stage)
         self.problem_solve()        
         # Stocker la solution pour cette étape
-        for i, u in enumerate(self.pb.U_base):
+        for i, u in enumerate(self.pb.U):
             self.stage_solutions[stage][i].x.array[:] = u.x.array
             
         # Rétablir le facteur par défaut
@@ -240,14 +240,14 @@ class Solve:
         """
         if self.dirk_method == "BDF1":
             # Pour BDF1, la solution finale est celle de l'unique étape
-            for i, u in enumerate(self.pb.U_base):
+            for i, u in enumerate(self.pb.U):
                 u.x.array[:] = self.stage_solutions[0][i].x.array
         else:
             # Calcul complet des z_h^{n,i} pour les méthodes DIRK d'ordre supérieur
             z_stage = []
             for stage in range(self.num_stages):
                 z_current = []
-                for i, u_n in enumerate(self.pb.Un_base):
+                for i, u_n in enumerate(self.pb.U_n):
                     a_ii = self.dirk_params.A[stage, stage]
                     stage_u = self.stage_solutions[stage][i]
                     z_i = (stage_u.x.array - u_n.x.array) / (self.dt * a_ii)
@@ -265,9 +265,9 @@ class Solve:
                 z_stage.append(z_current)
             
             # Calculer la solution finale
-            for i, u_n in enumerate(self.pb.Un_base):
+            for i, u_n in enumerate(self.pb.U_n):
                 # Commencer avec la solution au pas de temps précédent
-                self.pb.U_base[i].x.array[:] = u_n.x.array.copy()
+                self.pb.U[i].x.array[:] = u_n.x.array.copy()
                 
                 # Ajouter les contributions de chaque étape
                 for stage in range(self.num_stages):
@@ -275,13 +275,13 @@ class Solve:
                     if abs(b_s) < 1e-14:  # Ignorer les contributions nulles
                         continue                    
                     # U^{n+1} = U^n + dt * sum(b_i * z_h^{n,i})
-                    self.pb.U_base[i].x.array[:] += self.dt * b_s * z_stage[stage][i]
+                    self.pb.U[i].x.array[:] += self.dt * b_s * z_stage[stage][i]
 
     def update_fields(self):
         """
         Met à jour les champs pour le pas de temps suivant.
         """
-        for x, x_n in zip(self.pb.U_base, self.pb.Un_base):
+        for x, x_n in zip(self.pb.U, self.pb.U_n):
             x_n.x.array[:] = x.x.array
             
         # Mettre à jour la viscosité artificielle basée sur le nouvel état
@@ -314,7 +314,7 @@ class Solve:
                 self.update_time(j)
                 
                 # Sauvegarder la solution au pas de temps précédent
-                for i, (x, x_n) in enumerate(zip(self.pb.U_base, self.pb.Un_base)):
+                for i, (x, x_n) in enumerate(zip(self.pb.U, self.pb.U_n)):
                     x_n.x.array[:] = x.x.array
                 
                 # Résoudre chaque étape du schéma DIRK

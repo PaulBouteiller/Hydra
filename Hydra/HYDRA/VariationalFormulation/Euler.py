@@ -9,6 +9,7 @@ from ufl import outer, grad, Identity, inner, dot
 from ufl import MixedFunctionSpace, TestFunctions, TrialFunctions
 from petsc4py.PETSc import ScalarType
 from dolfinx.fem import functionspace, Function
+from..utils.generic_functions import extract_primitive_variables
 
 class EulerBoundaryConditions(BoundaryConditions):
     def __init__(self, U, Ubar, Ubar_test, facet_mesh, S, n, ds, tdim, entity_maps, facet_tag, dico_Vbar):
@@ -54,10 +55,12 @@ class CompressibleEuler(Problem):
     variables sont définies à la fois sur les éléments et sur leurs faces.
     """
 
-    def set_stabilization_matrix(self, u, ubar, c, n):
+    def set_stabilization_matrix(self, U, Ubar, c, n):
         """
         Local Lax-Friedrichs (Rusanov) stabilization matrix 
         """
+        _, u, _ = extract_primitive_variables(U)
+        _, ubar, _ = extract_primitive_variables(Ubar)
         evs_u = euler_eigenvalues_2D(u, n, c)
         evs_bar = euler_eigenvalues_2D(ubar, n, c)
         return max_abs_of_sequence([*evs_u, *evs_bar])
@@ -81,32 +84,27 @@ class CompressibleEuler(Problem):
         Initialise les champs inconnues du problème densité, vitesse, énergie
         """        
         self.rho = Function(self.V_rho, name = "Density")
-        self.u = Function(self.V_v, name = "Velocity")
-        self.E = Function(self.V_rho, name = "Energy")
-        self.rho_n, self.u_n, self.E_n = Function(self.V_rho), Function(self.V_v), Function(self.V_rho)
-        self.s_rho, self.s_u, self.s_E = Function(self.V_rho), Function(self.V_v), Function(self.V_rho)
+        self.rhou = Function(self.V_v, name = "Momentum")
+        self.rhoE = Function(self.V_rho, name = "Energy density")
+        self.rho_n, self.rhou_n, self.rhoE_n = Function(self.V_rho), Function(self.V_v), Function(self.V_rho)
 
-        self.rhobar, self.ubar, self.Ebar = Function(self.V_rhobar), Function(self.V_vbar), Function(self.V_rhobar)
+        self.rhobar, self.rhoubar, self.rhoEbar = Function(self.V_rhobar), Function(self.V_vbar), Function(self.V_rhobar)
 
         self.rho.x.petsc_vec.set(self.material.rho_0)
         self.rho_n.x.petsc_vec.set(self.material.rho_0)
         self.rhobar.x.petsc_vec.set(self.material.rho_0)    
         
-        self.U_base = [self.rho, self.u, self.E]
-        self.Ubar_base = [self.rhobar, self.ubar, self.Ebar]
-        self.Un_base = [self.rho_n, self.u_n, self.E_n]
-        
-        self.U = [self.rho, self.rho * self.u, self.rho * self.E]
-        self.Ubar = [self.rhobar, self.rhobar * self.ubar, self.rhobar * self.Ebar]
-        self.U_n = [self.rho_n, self.rho_n * self.u_n, self.rho_n * self.E_n]
+        self.U = [self.rho, self.rhou, self.rhoE]
+        self.Ubar = [self.rhobar, self.rhoubar, self.rhoEbar]
+        self.U_n = [self.rho_n, self.rhou_n, self.rhoE_n]
         
         self.dico_Vbar = {"Density" : self.V_rhobar, "Velocity" : self.V_vbar}
         
     def set_variable_to_solve(self):
         if self.iso_T:
-            self.u_list = self.U_base[:2] + self.Ubar_base[:2]
+            self.u_list = self.U[:2] + self.Ubar[:2]
         else:
-            self.u_list = self.U_base + self.Ubar_base
+            self.u_list = self.U + self.Ubar
         
     def set_test_functions(self):
         """
@@ -137,22 +135,21 @@ class CompressibleEuler(Problem):
         -------
         Liste des flux: [flux de masse, flux de quantité de mouvement, flux d'énergie]
         """
-        rho, u, E = U[0], U[1]/U[0], U[2]/U[0]
-        p = self.EOS.set_eos(rho, u, E, self.material)
+        p = self.EOS.set_eos(U, self.material)
         if self.use_shock_capturing:
             pass
             # p+= self.artificial_pressure.p_star
         return [self.mass_flux(U),
-                self.momentum_flux(rho, u, p),
+                self.momentum_flux(U, p),
                 self.energy_flux(U, p)]
     
     def mass_flux(self, U):
         """Renvoie le flux de masse ρu"""
         return U[1]
     
-    def momentum_flux(self, rho, u, p):
-        """Renvoie le flux de quantité de mouvement ρ u⊗u + pI """
-        return rho * outer(u, u) + p * Identity(self.tdim)
+    def momentum_flux(self, U, p):
+        """Renvoie le flux de quantité de mouvement (ρu ⊗ ρu) / ρ  + pI """
+        return  outer(U[1], U[1]) / U[0] + p * Identity(self.tdim)
     
     def energy_flux(self, U, p):
         """Renvoie le flux d'energie massique (ρE + p)u"""

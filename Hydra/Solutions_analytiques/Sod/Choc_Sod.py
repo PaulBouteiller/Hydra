@@ -20,24 +20,24 @@ p_gauche = 1.0
 p_droite = 0.1
         
 # Calcul de l'énergie interne spécifique (e) à partir de l'équation d'état du gaz parfait e = p/(rho*(gamma-1))
-e_gauche = p_gauche / (rho_gauche * (gamma - 1.0))
-e_droite = p_droite / (rho_droite * (gamma - 1.0))
+rhoE_gauche = p_gauche / (gamma - 1.0)
+rhoE_droite = p_droite / (gamma - 1.0)
 
 dico_eos = {"gamma": gamma}  # équation d'état de type gaz parfait
 dico_devia = {}
 Gaz = Material(rho0, 1, "GP", None, dico_eos, dico_devia)
 
 #Degré d'interpolation #~Volumes finis si degré 0.
-degree = 0
+degree = 3
     
-Nx = int(500 / (degree + 1))
+Nx = int(1000 / (degree + 1))
 
 Longueur = 1
 Largeur = 0.1 / Nx
 
 # Paramètres temporels
 t_end = 0.1  # temps final classique pour Sod
-dt = 2.5e-4    # pas de temps
+dt = 1e-3    # pas de temps
 num_time_steps = int(t_end/dt)
 
 
@@ -76,15 +76,10 @@ class SodShockTube(CompressibleEuler):
         # Position du diaphragme
         x_diaphragme = Longueur * 0.5
         
-        # Calcul de l'énergie totale spécifique (E = e + 0.5*u^2) pour chaque région
-        # Ici u=0, donc E = e
-        E_gauche = e_gauche
-        E_droite = e_droite
-        
         # Expressions pour les discontinuités
         x = SpatialCoordinate(self.mesh)
         rho_expr = conditional(lt(x[0], x_diaphragme), rho_gauche, rho_droite)
-        E_expr = conditional(lt(x[0], x_diaphragme), E_gauche, E_droite)
+        rhoE_expr = conditional(lt(x[0], x_diaphragme), rhoE_gauche, rhoE_droite)
         
         # Initialisation de la densité
         rho_expression = Expression(rho_expr, self.V_rho.element.interpolation_points())
@@ -92,20 +87,20 @@ class SodShockTube(CompressibleEuler):
         self.rho_n.interpolate(rho_expression)
         
         # Initialisation de l'énergie totale
-        E_expression = Expression(E_expr, self.V_E.element.interpolation_points())
-        self.E.interpolate(E_expression)
-        self.E_n.interpolate(E_expression)
+        rhoE_expression = Expression(rhoE_expr, self.V_E.element.interpolation_points())
+        self.rhoE.interpolate(rhoE_expression)
+        self.rhoE_n.interpolate(rhoE_expression)
 
         # Initialisation des variables aux interfaces pour HDG
         x_facet = SpatialCoordinate(self.facet_mesh)
         rho_facet_expr = conditional(lt(x_facet[0], x_diaphragme), rho_gauche, rho_droite)
-        E_facet_expr = conditional(lt(x_facet[0], x_diaphragme), E_gauche, E_droite)
+        rhoE_facet_expr = conditional(lt(x_facet[0], x_diaphragme), rhoE_gauche, rhoE_droite)
         
         rhobar_expression = Expression(rho_facet_expr, self.V_rhobar.element.interpolation_points())
         self.rhobar.interpolate(rhobar_expression)
         
-        Ebar_expression = Expression(E_facet_expr, self.V_Ebar.element.interpolation_points())
-        self.Ebar.interpolate(Ebar_expression)
+        rhoEbar_expression = Expression(rhoE_facet_expr, self.V_Ebar.element.interpolation_points())
+        self.rhoEbar.interpolate(rhoEbar_expression)
 
     def set_output(self):
         self.t_output_list = []

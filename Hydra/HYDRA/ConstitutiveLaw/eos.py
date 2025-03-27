@@ -21,7 +21,7 @@ class EOS:
         self.kin = kinematic
         self.quad = quadrature
     
-    def set_eos(self, rho, u, E, mat):
+    def set_eos(self, U, mat):
         """
         Renvoie l'expression de la pression
 
@@ -30,10 +30,12 @@ class EOS:
         p : Pression du modèle
         """
         eos_param = mat.eos
+        rho, u, E = extract_primitive_variables(U)
         if mat.eos_type == "U1":
             p = -eos_param.kappa * (mat.rho_0/rho - 1)
         elif mat.eos_type == "GP":
             p = (eos_param.gamma - 1) * rho * (E - 1./2 * dot(u, u))
+            # p = (eos_param.gamma - 1) * U[2] - 1./2 * dot(U[1], U[1]) / U[0]
         else:
             raise ValueError("Unknwon eos")
         return p

@@ -81,13 +81,12 @@ class CompressibleEuler(Problem):
         Initialise les champs inconnues du problème densité, vitesse, énergie
         """        
         self.rho = Function(self.V_rho, name = "Density")
-        self.u = Function(self.V_v, name = "Velocity")   
-        self.rho_n, self.u_n = Function(self.V_rho), Function(self.V_v)
-
-        self.rhobar, self.ubar = Function(self.V_rhobar), Function(self.V_vbar)
+        self.u = Function(self.V_v, name = "Velocity")
         self.E = Function(self.V_rho, name = "Energy")
-        self.E_n = Function(self.V_rho)
-        self.Ebar = Function(self.V_rhobar)
+        self.rho_n, self.u_n, self.E_n = Function(self.V_rho), Function(self.V_v), Function(self.V_rho)
+        self.s_rho, self.s_u, self.s_E = Function(self.V_rho), Function(self.V_v), Function(self.V_rho)
+
+        self.rhobar, self.ubar, self.Ebar = Function(self.V_rhobar), Function(self.V_vbar), Function(self.V_rhobar)
 
         self.rho.x.petsc_vec.set(self.material.rho_0)
         self.rho_n.x.petsc_vec.set(self.material.rho_0)
@@ -163,6 +162,13 @@ class CompressibleEuler(Problem):
         """Renvoie le résidu associé à la dynamique implicite avec facteur de temps ajustable"""
         return sum(inner((x - x_n) * self.dt_factor, x_test) * self.dx_c 
                    for x, x_n, x_test in zip(self.U, self.U_n, self.U_test))
+    
+    def set_dynamic_lhs(self):
+        return sum(inner(x * self.dt_factor, x_test) * self.dx_c 
+                   for x, x_test in zip(self.U, self.U_test))
+    
+    def set_dynamic_rhs(self, s_list):
+        return sum(inner(s, x_test) * self.dx_c  for s, x_test in zip(s_list, self.U_test))
     
     def set_volume_residual(self, U_flux):
         """Renvoie le résidu volumique"""

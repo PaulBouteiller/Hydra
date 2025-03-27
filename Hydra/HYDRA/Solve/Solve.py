@@ -78,6 +78,12 @@ class Solve:
         for u_base in self.pb.U_base:
             temp_u = u_base.copy()
             self.temp_solutions.append(temp_u)
+            
+        # Conserver les solutions temporaires pour le calcul des étapes
+        self.rhs_functions = [Function()]
+        for u_base in self.pb.U_base:
+            temp_u = u_base.copy()
+            self.temp_solutions.append(temp_u)
         
     def set_solver(self):
         """
@@ -163,12 +169,46 @@ class Solve:
         
         Parameters
         ----------
-        stage : int
-            Numéro de l'étape.
+        stage : int  Numéro de l'étape.
         """
         # Pour cette étape, on modifie le facteur du terme temporel
         a_ii = self.dirk_params.A[stage, stage]
         self.pb.dt_factor.value = 1.0 / (self.dt * a_ii)
+        
+        # Mettre à jour les conditions aux limites pour le temps intermédiaire
+        stage_time = self.stage_times[stage]
+        stage_step = int(stage_time / (self.Tfin/self.num_time_steps))
+        self.pb.update_bcs(stage_step)
+        for i in range(len(self.pb.bc_class.mcl)):            
+            self.pb.bc_class.mcl[i].constant.value = self.pb.bc_class.mcl[i].value_array[stage_step]
+            
+    def new_configure_stage_residual(self, stage):
+        """
+        Configure le résidu pour une étape spécifique du schéma DIRK.
+        
+        Parameters
+        ----------
+        stage : int  Numéro de l'étape.
+        """
+        # Pour cette étape, on modifie le facteur du terme temporel pour le dynamic_lhs
+        a_ii = self.dirk_params.A[stage, stage]
+        self.pb.dt_factor.value = 1.0 / (self.dt * a_ii)
+        
+        
+        for i, u_n in enumerate(self.pb.Un_base):
+            a_ii = self.dirk_params.A[stage, stage]
+            stage_u = self.stage_solutions[stage][i]
+            z_i = (stage_u.x.array - u_n.x.array) / (self.dt * a_ii)
+            
+            # Soustraire les contributions des étapes précédentes
+            if stage > 0:
+                for prev_stage in range(stage):
+                    a_ij = self.dirk_params.A[stage, prev_stage]
+                    if abs(a_ij) > 1e-14:  # Ignorer les contributions nulles
+                        prev_z = z_stage[prev_stage][i]
+                        z_i -= (a_ij / a_ii) * prev_z
+
+        self.pb.s.x.array = u_n.x.array / (self.dt * a_ii)
         
         # Mettre à jour les conditions aux limites pour le temps intermédiaire
         stage_time = self.stage_times[stage]
@@ -203,38 +243,22 @@ class Solve:
             for i, u in enumerate(self.pb.U_base):
                 u.x.array[:] = self.stage_solutions[0][i].x.array
         else:
-            # Calcul complet pour les méthodes DIRK d'ordre supérieur
-            # Calculer les z_h^{n,i} en séquence
+            # Calcul complet des z_h^{n,i} pour les méthodes DIRK d'ordre supérieur
             z_stage = []
-            
             for stage in range(self.num_stages):
                 z_current = []
                 for i, u_n in enumerate(self.pb.Un_base):
                     a_ii = self.dirk_params.A[stage, stage]
                     stage_u = self.stage_solutions[stage][i]
+                    z_i = (stage_u.x.array - u_n.x.array) / (self.dt * a_ii)
                     
-                    # Calcul spécial pour l'étape explicite (a_ii = 0)
-                    if abs(a_ii) < 1e-14:  # Considéré comme zéro
-                        if stage == 0:  # Première étape (explicite)
-                            # On peut sauter cette étape car elle ne contribue pas à la solution finale
-                            z_i = zeros_like(stage_u.x.array)
-                        else:
-                            # Cela ne devrait pas arriver avec des méthodes standard
-                            print(f"AVERTISSEMENT: a_ii proche de zéro à l'étape {stage}")
-                            # Utiliser une approximation par différence finie
-                            z_i = (stage_u.x.array - u_n.x.array) / self.dt
-                    else:
-                        # Calcul normal pour z_h^{n,i}
-                        z_i = (stage_u.x.array - u_n.x.array) / (self.dt * a_ii)
-                        
-                        # Soustraire les contributions des étapes précédentes
-                        if stage > 0:
-                            for prev_stage in range(stage):
-                                a_ij = self.dirk_params.A[stage, prev_stage]
-                                if abs(a_ij) > 1e-14:  # Ignorer les contributions nulles
-                                    prev_z = z_stage[prev_stage][i]
-                                    if abs(a_ii) > 1e-14:  # Éviter division par zéro
-                                        z_i -= (a_ij / a_ii) * prev_z
+                    # Soustraire les contributions des étapes précédentes
+                    if stage > 0:
+                        for prev_stage in range(stage):
+                            a_ij = self.dirk_params.A[stage, prev_stage]
+                            if abs(a_ij) > 1e-14:  # Ignorer les contributions nulles
+                                prev_z = z_stage[prev_stage][i]
+                                z_i -= (a_ij / a_ii) * prev_z
                     
                     z_current.append(z_i)
                 
@@ -249,12 +273,9 @@ class Solve:
                 for stage in range(self.num_stages):
                     b_s = self.dirk_params.b[stage]
                     if abs(b_s) < 1e-14:  # Ignorer les contributions nulles
-                        continue
-                        
-                    z_i = z_stage[stage][i]
-                    
+                        continue                    
                     # U^{n+1} = U^n + dt * sum(b_i * z_h^{n,i})
-                    self.pb.U_base[i].x.array[:] += self.dt * b_s * z_i
+                    self.pb.U_base[i].x.array[:] += self.dt * b_s * z_stage[stage][i]
 
     def update_fields(self):
         """

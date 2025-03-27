@@ -27,10 +27,8 @@ dico_eos = {"gamma": gamma}  # équation d'état de type gaz parfait
 dico_devia = {}
 Gaz = Material(rho0, 1, "GP", None, dico_eos, dico_devia)
 
-
-
-#Degré de précision
-degree = 3
+#Degré d'interpolation #~Volumes finis si degré 0.
+degree = 0
     
 Nx = int(500 / (degree + 1))
 
@@ -99,7 +97,6 @@ class SodShockTube(CompressibleEuler):
         self.E_n.interpolate(E_expression)
 
         # Initialisation des variables aux interfaces pour HDG
-        # Pour le maillage de facettes
         x_facet = SpatialCoordinate(self.facet_mesh)
         rho_facet_expr = conditional(lt(x_facet[0], x_diaphragme), rho_gauche, rho_droite)
         E_facet_expr = conditional(lt(x_facet[0], x_diaphragme), E_gauche, E_droite)
@@ -133,7 +130,7 @@ left_state = (p_gauche, rho_gauche, 0)  # état gauche (pression, densité, vite
 right_state = (p_droite, rho_droite, 0.)  # état droit (pression, densité, vitesse)
 
 # Calculer la solution
-positions, regions, values = sodshock_analytique.solve(
+positions, regions, values = sod_shock_analytic.solve(
     left_state=left_state, 
     right_state=right_state, 
     geometry=(0., 1., 0.5),  # frontières gauche, droite et position du choc
@@ -167,8 +164,6 @@ if degree !=0:
 else:
     rho_array = rho_result[-1]
     x_array = rho_result[0]
-    
-
 
 p_df = read_csv("SodShockTube-results/Pressure.csv")
 p_result = [p_df[colonne].to_numpy() for colonne in p_df.columns]

@@ -378,7 +378,6 @@ class Problem:
     def fem_parameters(self):
         fem_parameters = default_fem_parameters()
         self.deg = fem_parameters.get("u_degree")
-        self.schema= fem_parameters.get("schema")
         
     def set_initial_conditions(self):
         pass

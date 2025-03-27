@@ -27,8 +27,12 @@ dico_eos = {"gamma": gamma}  # équation d'état de type gaz parfait
 dico_devia = {}
 Gaz = Material(rho0, 1, "GP", None, dico_eos, dico_devia)
 
-# Paramètres de maillage et simulation
-Nx = 125   # nombre de cellules
+
+
+#Degré de précision
+degree = 3
+    
+Nx = int(500 / (degree + 1))
 
 Longueur = 1
 Largeur = 0.1 / Nx
@@ -37,6 +41,8 @@ Largeur = 0.1 / Nx
 t_end = 0.1  # temps final classique pour Sod
 dt = 2.5e-4    # pas de temps
 num_time_steps = int(t_end/dt)
+
+
 
 class SodShockTube(CompressibleEuler):
     def __init__(self, material):
@@ -59,6 +65,9 @@ class SodShockTube(CompressibleEuler):
         self.bc_class.wall_residual(2, "x")
         self.bc_class.wall_residual(3, "y")
         self.bc_class.wall_residual(4, "y")
+        
+    def fem_parameters(self):
+        self.deg = degree
         
     def set_initial_conditions(self):
         """
@@ -115,7 +124,7 @@ class SodShockTube(CompressibleEuler):
 pb = SodShockTube(Gaz)
 Solve(pb, dirk_method="BDF1", TFin=t_end, dt=dt)
 
-import sodshock_analytique
+import sod_shock_analytic
 
 # Paramètres de la simulation
 dustFrac = 0.0  # fraction de poussière (0 = gaz pur)
@@ -150,16 +159,27 @@ f, axarr = plt.subplots(2, sharex=True)
 
 rho_df = read_csv("SodShockTube-results/rho.csv")
 rho_result = [rho_df[colonne].to_numpy() for colonne in rho_df.columns]
-mask = rho_result[1]<=1e-10
-rho_array = rho_result[-1][mask] 
-x_array = rho_result[0][mask]
+if degree !=0:
+    y = rho_result[1]
+    mask = y<=1e-10
+    rho_array = rho_result[-1][mask] 
+    x_array = rho_result[0][mask]
+else:
+    rho_array = rho_result[-1]
+    x_array = rho_result[0]
+    
 
 
 p_df = read_csv("SodShockTube-results/Pressure.csv")
 p_result = [p_df[colonne].to_numpy() for colonne in p_df.columns]
-mask_p = p_result[1]<=1e-10
-p_array = p_result[-1][mask_p] 
-xp_array = p_result[0][mask_p]
+if degree !=0:
+    y = rho_result[1]
+    mask_p = y<=1e-10
+    p_array = p_result[-1][mask_p] 
+    xp_array = p_result[0][mask_p]
+else:
+    p_array = p_result[-1] 
+    xp_array = p_result[0]   
 
 
 axarr[0].plot(values['x'], values['p'], linewidth=1.5, color='b')

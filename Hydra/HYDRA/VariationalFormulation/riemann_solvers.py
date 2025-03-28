@@ -201,6 +201,44 @@ class RiemannSolvers:
         return fluxes
         
     def hllc_flux(self, U, Ubar, U_flux, Ubar_flux, n, signal_speed_type="davis"):
+        """Calcule le flux numérique HLLC (Harten-Lax-van Leer-Contact).
+    
+        Le solveur HLLC est une amélioration du solveur HLL qui restaure la précision
+        de la discontinuité de contact, ce qui est crucial pour les problèmes multi-matériaux
+        et les interfaces entre différentes phases.
+        
+        L'idée principale du HLLC est de considérer une structure d'onde à trois ondes:
+        - S_L : Vitesse de l'onde la plus à gauche
+        - S_* : Vitesse de la discontinuité de contact
+        - S_R : Vitesse de l'onde la plus à droite
+        
+        Cette structure permet de définir trois états intermédiaires, et le flux numérique
+        est calculé en fonction de la position relative de zéro par rapport à ces vitesses.
+        
+        Parameters
+        ----------
+        U : list[ufl.core.expr.Expr] Variables conservatives à l'intérieur de l'élément [ρ, ρu, ρE].
+        Ubar : list[ufl.core.expr.Expr] Variables conservatives à la facette [ρ, ρu, ρE].
+        U_flux : list[ufl.core.expr.Expr] Flux physiques à l'intérieur de l'élément.
+        Ubar_flux : list[ufl.core.expr.Expr] Flux physiques à la facette.
+        n : ufl.core.expr.Expr Vecteur normal unitaire à la facette.
+        signal_speed_type : str, optional
+            Type d'estimateur de vitesse d'onde à utiliser:
+            - "davis" : Estimateur simple basé sur les valeurs max/min locales
+            - "einfeldt" : Estimateur plus précis basé sur la moyenne de Roe
+            
+        Returns
+        -------
+        list[ufl.core.expr.Expr] Flux numériques HLLC pour chaque variable conservative.
+            
+        References
+        ----------
+        .. [1] Toro, E.F. (2009). "Riemann Solvers and Numerical Methods for Fluid Dynamics."
+               Springer-Verlag, 3rd edition, pp. 321-326.
+        .. [2] Batten, P., Leschziner, M.A., & Goldberg, U.C. (1997). "Average-state Jacobians
+               and implicit methods for compressible viscous and turbulent flows."
+               Journal of Computational Physics, 137(1), 38-78.
+        """
         rho_L, u_L, E_L = extract_primitive_variables(U)
         rho_R, u_R, E_R = extract_primitive_variables(Ubar)
         

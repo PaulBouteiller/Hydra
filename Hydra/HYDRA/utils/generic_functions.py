@@ -73,6 +73,27 @@ def map_ufl_operator_to_sequence(a, op):
     return alpha
 
 def extract_primitive_variables(U):
+    """Extrait les variables primitives à partir des variables conservatives.
+
+    Cette fonction décompose le vecteur des variables conservatives U = [ρ, ρu, ρE]
+    en variables primitives [ρ, u, E] où ρ est la densité, u est la vitesse,
+    et E est l'énergie spécifique totale.
+    
+    Parameters
+    ----------
+    U : list[ufl.core.expr.Expr] Liste des variables conservatives [ρ, ρu, ρE].
+    Returns
+    -------
+    tuple Triplet (ρ, u, E) des variables primitives, où:
+        - ρ : Densité
+        - u : Vitesse (vecteur)
+        - E : Énergie spécifique totale  
+    Notes
+    -----
+    Cette transformation est nécessaire pour calculer la pression et d'autres
+    quantités thermodynamiques qui sont naturellement exprimées en termes des
+    variables primitives.
+    """
     rho = U[0]
     u = U[1] / rho
     E = U[2] / rho

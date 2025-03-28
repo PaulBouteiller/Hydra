@@ -114,21 +114,6 @@ class Square(CompressibleEuler):
         ubar_init = as_vector([u_x_condition, u_y_condition])
         ubar_expr = Expression(ubar_init, self.V_vbar.element.interpolation_points())
         self.ubar.interpolate(ubar_expr)
-        
-        
-        # # Création du vecteur vitesse
-        # u_init = as_vector([u_x_condition, u_y_condition])
-        # u_expr = Expression(u_init, self.V_v.element.interpolation_points())
-        # self.U_base[1].interpolate(u_expr)
-        # self.Un_base[1].interpolate(u_expr)
-
-        # # Application pour le facet mesh
-        # u_x_condition, u_y_condition = create_initial_conditions(SpatialCoordinate(self.facet_mesh), v_imp)
-
-        # # Création du vecteur vitesse pour le facet mesh
-        # ubar_init = as_vector([u_x_condition, u_y_condition])
-        # ubar_expr = Expression(ubar_init, self.V_vbar.element.interpolation_points())
-        # self.Ubar_base[1].interpolate(ubar_expr)
 
     def set_output(self):
         return {"v" : True}

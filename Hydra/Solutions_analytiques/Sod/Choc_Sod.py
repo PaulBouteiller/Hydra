@@ -55,7 +55,7 @@ class SodShockTube(CompressibleEuler):
             
     def set_boundary(self):
         # Marquer les frontières: gauche, droite, bas, haut
-        self.mark_boundary([1, 2, 3, 4], ["x", "x", "y", "y"], [0, Longueur, 0, Largeur])
+        self.mesh_manager.mark_boundary([1, 2, 3, 4], ["x", "x", "y", "y"], [0, Longueur, 0, Largeur])
         
     def set_boundary_conditions(self):
         # Conditions de paroi sur toutes les frontières
@@ -76,8 +76,6 @@ class SodShockTube(CompressibleEuler):
         # Position du diaphragme
         x_diaphragme = Longueur * 0.5
         x = SpatialCoordinate(self.mesh)
-        
-
         
         # Initialisation de la densité
         rho_expr = conditional(lt(x[0], x_diaphragme), rho_gauche, rho_droite)
@@ -114,8 +112,8 @@ class SodShockTube(CompressibleEuler):
         return {"rho": True, "Pressure":True}
     
 pb = SodShockTube(Gaz)
-# Solve(pb, dirk_method="BDF1", TFin=t_end, dt=dt)
-Solve(pb, dirk_method="SDIRK5", TFin=t_end, dt=dt)
+Solve(pb, dirk_method="BDF1", TFin=t_end, dt=dt)
+# Solve(pb, dirk_method="SDIRK5", TFin=t_end, dt=dt)
 
 import sod_shock_analytic
 

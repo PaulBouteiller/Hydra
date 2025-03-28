@@ -9,6 +9,7 @@ non-linéaires à chaque pas de temps.
 """
 
 from .customblockedNewton import BlockedNewtonSolver
+from .hybrid_blocked_newton import HybridBlockedNewtonSolver
 from ..utils.block import extract_rows, derivative_block
 from ..utils.default_parameters import default_Newton_parameters
 from ..Export.export_result import ExportResults
@@ -122,6 +123,15 @@ class Solve:
             petsc_options=petsc_options, 
             entity_maps=self.pb.entity_maps
         )
+        
+        # self.solver = HybridBlockedNewtonSolver(
+        #     Fr_form, 
+        #     self.pb.u_list, 
+        #     J_form, 
+        #     bcs=self.pb.bc_class.bcs, 
+        #     petsc_options=petsc_options, 
+        #     entity_maps=self.pb.entity_maps
+        # )
 
     def setup_time_parameters(self, **kwargs):
         """
@@ -433,4 +443,4 @@ class Solve:
         
         # Mise à jour de la viscosité artificielle basée sur le nouvel état
         # Désactivée par défaut, décommenter si nécessaire
-        # self.pb.artificial_pressure.compute_artificial_pressure()
+        self.pb.artificial_pressure.compute_artificial_pressure()

@@ -142,8 +142,7 @@ class CompressibleEuler(Problem):
         """
         p = self.EOS.set_eos(U, self.material)
         if self.use_shock_capturing:
-            pass
-            # p+= self.artificial_pressure.p_star
+            p+= self.artificial_pressure.p_star
         return [self.mass_flux(U),
                 self.momentum_flux(U, p),
                 self.energy_flux(U, p)]

@@ -5,6 +5,7 @@ Created on Tue Mar 11 16:01:20 2025
 """
 from ufl import div, inner
 from dolfinx.fem import Function, Expression
+from ..utils.generic_functions import extract_primitive_variables
 
 def npart(x):
     return (x - abs(x))/2
@@ -48,15 +49,14 @@ class ArtificialPressure:
         self.c = c
         self.deg = degree
         self.p_star = Function(V_p, name="ShockIndicator")
-        # self.set_artifial_pressure(sensor)
+        self.set_artifial_pressure(sensor)
         
     def set_artifial_pressure(self, sensor):
-        rho, u = self.U[0], self.U[1]/self.U[0]
-        coeff = 1.5e-3
+        rho, u, _ = extract_primitive_variables(self.U)
+        coeff = 7e-2
         p_star = coeff * rho * self.h / (self.deg + 1) * (inner(u, u) + self.c**2)**0.5 * sensor.sensor_expr * npart(div(u))
         self.p_star_expr = Expression(p_star, self.V_p.element.interpolation_points())
         self.p_star.interpolate(self.p_star_expr)
-    
     
     def compute_artificial_pressure(self):
         self.p_star.interpolate(self.p_star_expr)

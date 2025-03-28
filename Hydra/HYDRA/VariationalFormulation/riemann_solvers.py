@@ -3,7 +3,7 @@ Created on Fri Mar  7 15:57:50 2025
 
 @author: bouteillerp
 """
-from ufl import sqrt, dot, conditional, gt, max_value, min_value
+from ufl import sqrt, dot, conditional, gt, max_value, min_value, ge, lt
 from ..utils.generic_functions import extract_primitive_variables
 
 class RiemannSolvers:
@@ -200,101 +200,85 @@ class RiemannSolvers:
         
         return fluxes
         
-    def hllc_flux(self, U, Ubar, U_flux, Ubar_flux, n, signal_speed_type="davis"):
-        """Calcule le flux numérique HLLC (Harten-Lax-van Leer-Contact).
-    
-        Le solveur HLLC est une amélioration du solveur HLL qui restaure la précision
-        de la discontinuité de contact, ce qui est crucial pour les problèmes multi-matériaux
-        et les interfaces entre différentes phases.
-        
-        L'idée principale du HLLC est de considérer une structure d'onde à trois ondes:
-        - S_L : Vitesse de l'onde la plus à gauche
-        - S_* : Vitesse de la discontinuité de contact
-        - S_R : Vitesse de l'onde la plus à droite
-        
-        Cette structure permet de définir trois états intermédiaires, et le flux numérique
-        est calculé en fonction de la position relative de zéro par rapport à ces vitesses.
-        
-        Parameters
-        ----------
-        U : list[ufl.core.expr.Expr] Variables conservatives à l'intérieur de l'élément [ρ, ρu, ρE].
-        Ubar : list[ufl.core.expr.Expr] Variables conservatives à la facette [ρ, ρu, ρE].
-        U_flux : list[ufl.core.expr.Expr] Flux physiques à l'intérieur de l'élément.
-        Ubar_flux : list[ufl.core.expr.Expr] Flux physiques à la facette.
-        n : ufl.core.expr.Expr Vecteur normal unitaire à la facette.
-        signal_speed_type : str, optional
-            Type d'estimateur de vitesse d'onde à utiliser:
-            - "davis" : Estimateur simple basé sur les valeurs max/min locales
-            - "einfeldt" : Estimateur plus précis basé sur la moyenne de Roe
-            
-        Returns
-        -------
-        list[ufl.core.expr.Expr] Flux numériques HLLC pour chaque variable conservative.
-            
-        References
-        ----------
-        .. [1] Toro, E.F. (2009). "Riemann Solvers and Numerical Methods for Fluid Dynamics."
-               Springer-Verlag, 3rd edition, pp. 321-326.
-        .. [2] Batten, P., Leschziner, M.A., & Goldberg, U.C. (1997). "Average-state Jacobians
-               and implicit methods for compressible viscous and turbulent flows."
-               Journal of Computational Physics, 137(1), 38-78.
+    def hllc_flux(self, U, Ubar, U_flux, Ubar_flux, n):
         """
+        Calcule le flux numérique HLLC (Harten-Lax-van Leer-Contact).
+        Implémentation directe basée sur l'article original de Toro et al. (1994).
+        """
+        # Extraction des variables primitives
         rho_L, u_L, E_L = extract_primitive_variables(U)
         rho_R, u_R, E_R = extract_primitive_variables(Ubar)
         
         # Calcul des pressions
-        p_L = self.EOS.set_eos(rho_L, u_L, E_L, self.material)
-        p_R = self.EOS.set_eos(rho_R, u_R, E_R, self.material)
-
-        # Calcul des vitesses d'onde
-        if signal_speed_type == "davis":
-            S_L, S_R = self.signal_speed_davis(u_L, u_R, self.c, self.c_bar, n)
-        elif signal_speed_type == "einfeldt":
-            S_L, S_R = self.signal_speed_einfeldt(u_L, u_R, self.c, self.c_bar, rho_L, rho_R, n)
+        p_L = self.EOS.set_eos(U, self.material)
+        p_R = self.EOS.set_eos(Ubar, self.material)
         
-        # Forcer S_L < 0 et S_R > 0 pour la stabilité
-        S_L = min_value(S_L, -self.eps)
-        S_R = max_value(S_R, self.eps)
-        S_star = self.compute_star_speed(u_L, u_R, p_L, p_R, rho_L, rho_R, S_L, S_R, n)
+        # Vitesses normales
+        u_n_L = dot(u_L, n)
+        u_n_R = dot(u_R, n)
         
-        #S_star entre S_L et S_R
-        S_star = min_value(max_value(S_star, S_L + self.eps), S_R - self.eps)
+        # Estimation des vitesses d'onde (Davis)
+        S_L = min_value(u_n_L - self.c, u_n_R - self.c_bar)
+        S_R = max_value(u_n_L + self.c, u_n_R + self.c_bar)
         
-        # Flux standards
+        # Protection contre les cas pathologiques
+        S_L = conditional(gt(S_L, 0), S_L, min_value(S_L, -1e-8))
+        S_R = conditional(lt(S_R, 0), S_R, max_value(S_R, 1e-8))
+        
+        # Vitesse de l'onde de contact (eq. 10 de Toro 1994)
+        S_M = (p_R - p_L + rho_L * u_n_L * (S_L - u_n_L) - rho_R * u_n_R * (S_R - u_n_R)) / \
+              (rho_L * (S_L - u_n_L) - rho_R * (S_R - u_n_R) + 1e-15)
+        
+        # Flux standards en direction normale
         F_L = [dot(f, n) for f in U_flux]
         F_R = [dot(f, n) for f in Ubar_flux]
         
-        # Facteur de mélange augmenté légèrement
-        blend_factor = 0.05  # Augmenté de 0.01 à 0.05
-        energy_blend = 0.05  # Facteur plus conservateur pour l'énergie
+        # États intermédiaires selon Toro (1994)
+        # Densités dans les régions intermédiaires (eqs. 22 et 26)
+        rho_star_L = rho_L * (S_L - u_n_L) / (S_L - S_M + 1e-15)
+        rho_star_R = rho_R * (S_R - u_n_R) / (S_R - S_M + 1e-15)
         
-        # Version améliorée du flux HLLC
+        # Pressions dans les régions intermédiaires (eqs. 23 et 27)
+        p_star_L = p_L + rho_L * (S_L - u_n_L) * (S_M - u_n_L)
+        p_star_R = p_R + rho_R * (S_R - u_n_R) * (S_M - u_n_R)
+        
+        # Prendre la moyenne des pressions pour être cohérent
+        p_star = (p_star_L + p_star_R) / 2.0
+        
+        # Calcul des flux HLLC
+        F_star_L = []
+        F_star_R = []
+        
+        # Flux de masse
+        F_star_L.append(F_L[0] + S_L * (rho_star_L - rho_L))
+        F_star_R.append(F_R[0] + S_R * (rho_star_R - rho_R))
+        
+        # Flux de quantité de mouvement - utiliser p_star pour la cohérence
+        mom_star_L = rho_star_L * (u_L + (S_M - u_n_L) * n)
+        mom_star_R = rho_star_R * (u_R + (S_M - u_n_R) * n)
+        
+        # Correction : Utiliser p_star dans les termes de pression
+        F_star_L.append(F_L[1] + S_L * (mom_star_L - U[1]))
+        F_star_R.append(F_R[1] + S_R * (mom_star_R - Ubar[1]))
+        
+        # Flux d'énergie - utiliser p_star pour la cohérence
+        # Calculer l'énergie totale dans les régions intermédiaires en utilisant p_star
+        E_star_L = rho_star_L * (E_L + (S_M - u_n_L) * (S_M + p_star/(rho_L * (S_L - u_n_L) + 1e-15)))
+        E_star_R = rho_star_R * (E_R + (S_M - u_n_R) * (S_M + p_star/(rho_R * (S_R - u_n_R) + 1e-15)))
+        
+        F_star_L.append(F_L[2] + S_L * (E_star_L - U[2]))
+        F_star_R.append(F_R[2] + S_R * (E_star_R - Ubar[2]))
+        
+        # Détermination du flux HLLC en fonction de la position de l'onde
         fluxes = []
-        for i in range(len(U)):
-            # Flux HLL standard
-            flux_hll = (S_R * F_L[i] - S_L * F_R[i] + S_L * S_R * (Ubar[i] - U[i])) / (S_R - S_L)
-            correction_dir = conditional(gt(S_star, 0), 1.0, -1.0)
-            if i == 1:  # Quantité de mouvement
-                # Correction scalaire basée sur la densité et la vitesse du son
-                rho_avg = 0.5 * (rho_L + rho_R)
-                rho_ratio = abs(rho_L - rho_R) / (rho_L + rho_R + self.eps)
-                correction_scalar = blend_factor * rho_avg * self.c * self.c * rho_ratio
-                
-                # Appliquer la correction comme un vecteur dans la direction normale
-                flux = flux_hll + correction_dir * correction_scalar * n
-                
-            elif i == 2:  # Énergie
-                # Correction adaptée pour l'énergie
-                p_avg = 0.5 * (p_L + p_R)
-                energy_ratio = abs(E_L - E_R) / (abs(E_L) + abs(E_R) + self.eps)
-                energy_correction = energy_blend * p_avg * energy_ratio
-                
-                # Appliquer la correction comme un scalaire directement à l'énergie
-                flux = flux_hll + correction_dir * energy_correction
-                
-            else:
-                flux = flux_hll
-            
+        for k in range(len(U)):
+            flux = conditional(ge(S_L, 0),
+                              F_L[k],
+                              conditional(ge(S_M, 0),
+                                         F_star_L[k],
+                                         conditional(ge(S_R, 0),
+                                                    F_star_R[k],
+                                                    F_R[k])))
             fluxes.append(flux)
         
         return fluxes

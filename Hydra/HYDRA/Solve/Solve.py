@@ -3,13 +3,13 @@ Created on Tue Mar  8 15:51:14 2022
 
 @author: bouteillerp
 """
+from .customblockedNewton import BlockedNewtonSolver
 from ..utils.block import extract_rows, derivative_block
 from ..utils.default_parameters import default_Newton_parameters
 from ..Export.export_result import ExportResults
-from .customblockedNewton import BlockedNewtonSolver
 from ..utils.dirk_parameters import DIRKParameters
 from tqdm import tqdm
-from numpy import linspace, zeros_like
+from numpy import linspace
 from dolfinx.fem import form, Function
 
 class Solve:
@@ -44,6 +44,7 @@ class Solve:
         self.t = 0        
         self.export = ExportResults(problem, kwargs.get("Prefix", self.pb.prefix()), 
                                    self.pb.set_output(), self.pb.csv_output())
+        self.in_loop_export(self.t)
         self.set_solver()
         self.Tfin = kwargs.get("TFin")
         self.dt = kwargs.get("dt")
@@ -63,15 +64,10 @@ class Solve:
         Pour Backward Euler (BDF1), il n'y a qu'une seule étape.
         """
         self.num_stages = self.dirk_params.num_stages
-        self.stage_solutions = []
-        for s in range(self.num_stages):
-            # Cloner les fonctions de solution pour chaque étape
-            stage_u = []
-            for u in self.pb.U:
-                u_stage = u.copy()
-                stage_u.append(u_stage)
-            self.stage_solutions.append(stage_u)
-        self.stage_rhs = [[Function(self.pb.V_rho), Function(self.pb.V_v), Function(self.pb.V_rho)] for _ in range(self.num_stages)]
+        self.stage_solutions = [[Function(self.pb.V_rho), Function(self.pb.V_v), Function(self.pb.V_rho)] 
+                          for _ in range(self.num_stages)]
+        self.stage_rhs = [[Function(self.pb.V_rho), Function(self.pb.V_v), Function(self.pb.V_rho)] 
+                          for _ in range(self.num_stages)]
         for i, s in enumerate(self.pb.s):
             s.x.array[:] = self.pb.U_n[i].x.array * self.pb.dt_factor.value
             self.stage_rhs[0][i].x.array[:] = s.x.array
@@ -85,13 +81,10 @@ class Solve:
         Fr_form = form(Fr, entity_maps=self.pb.entity_maps)
         J_form = form(J, entity_maps=self.pb.entity_maps)
         petsc_options = default_Newton_parameters()
-        petsc_options.update({
-            # Options générales pour MUMPS
-            "pc_factor_mat_solver_type": "mumps",
-            # Activer BLR (Block Low-Rank) pour MUMPS
-            "mat_mumps_icntl_35": 1,
-            "mat_mumps_cntl_7": 1e-8,
-        })
+        petsc_options.update({"pc_factor_mat_solver_type": "mumps",
+                              # Activer BLR (Block Low-Rank) pour MUMPS
+                              "mat_mumps_icntl_35": 1,
+                              "mat_mumps_cntl_7": 1e-8})
         
         self.solver = BlockedNewtonSolver(Fr_form, self.pb.u_list, J_form, bcs = self.pb.bc_class.bcs, 
                                           petsc_options=petsc_options, 
@@ -134,7 +127,6 @@ class Solve:
         ----------
         stage : int  Numéro de l'étape.
         """
-        # Pour cette étape, on modifie le facteur du terme temporel
         a_ii = self.dirk_params.A[stage, stage]
         self.pb.dt_factor.value = 1.0 / (self.dt * a_ii)
         stage_s = self.calculate_stage_source_term(stage)
@@ -152,7 +144,6 @@ class Solve:
         """
         Calcule les termes sources s_h^{n,i} pour l'étape 'stage' selon la formulation théorique.
         """
-        # Pour la première étape, les termes sources ont déjà été initialisés dans votre code
         if stage == 0:
             for i, s in enumerate(self.pb.s):
                 s.x.array[:] = self.pb.U_n[i].x.array * self.pb.dt_factor.value
@@ -161,7 +152,6 @@ class Solve:
         
         # Pour les étapes suivantes, calculer les termes sources récursivement
         a_ii = self.dirk_params.A[stage, stage]
-        
         for i, u_n in enumerate(self.pb.U_n):
             # Terme de base : U_h^n / (a_ii * dt)
             base_term = u_n.x.array.copy() / (a_ii * self.dt)
@@ -170,15 +160,13 @@ class Solve:
             # Ajouter les contributions des étapes précédentes
             for j in range(stage):
                 a_ij = self.dirk_params.A[stage, j]
-                if abs(a_ij) > 1e-14:  # Ignorer les coefficients proches de zéro
+                if abs(a_ij) > 1e-14:
                     a_jj = self.dirk_params.A[j, j]
                     prev_u = self.stage_solutions[j][i]
                     prev_s = self.stage_rhs[j][i]
                     
                     # Calculer (U_h^{n,j}/(a_jj*dt) - s_h^{n,j})
                     correction = prev_u.x.array / (a_jj * self.dt) - prev_s.x.array
-                    
-                    # Ajouter (a_ij/a_ii) * correction
                     self.stage_rhs[stage][i].x.array[:] += (a_ij / a_ii) * correction
         
         return self.stage_rhs[stage]
@@ -201,12 +189,6 @@ class Solve:
         Calcule la solution finale en utilisant la formule du schéma DIRK.
         Pour BDF1, cela revient à utiliser la solution de l'étape unique.
         """
-        # if self.dirk_method == "BDF1":
-        #     pass
-        #     # Pour BDF1, la solution finale est celle de l'unique étape
-        #     # for i, u in enumerate(self.pb.U):
-        #     #     u.x.array[:] = self.stage_solutions[0][i].x.array
-        # else:
         if self.dirk_method != "BDF1":
             # Calcul complet des z_h^{n,i} pour les méthodes DIRK d'ordre supérieur
             z_stage = []
@@ -231,8 +213,7 @@ class Solve:
             
             # Calculer la solution finale
             for i, u_n in enumerate(self.pb.U_n):
-                # Commencer avec la solution au pas de temps précédent
-                self.pb.U[i].x.array[:] = u_n.x.array.copy()
+                self.pb.U[i].x.array[:] = u_n.x.array
                 
                 # Ajouter les contributions de chaque étape
                 for stage in range(self.num_stages):

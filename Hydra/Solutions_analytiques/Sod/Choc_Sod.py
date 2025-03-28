@@ -75,18 +75,18 @@ class SodShockTube(CompressibleEuler):
         """
         # Position du diaphragme
         x_diaphragme = Longueur * 0.5
-        
-        # Expressions pour les discontinuités
         x = SpatialCoordinate(self.mesh)
-        rho_expr = conditional(lt(x[0], x_diaphragme), rho_gauche, rho_droite)
-        rhoE_expr = conditional(lt(x[0], x_diaphragme), rhoE_gauche, rhoE_droite)
+        
+
         
         # Initialisation de la densité
+        rho_expr = conditional(lt(x[0], x_diaphragme), rho_gauche, rho_droite)
         rho_expression = Expression(rho_expr, self.V_rho.element.interpolation_points())
         self.rho.interpolate(rho_expression)
         self.rho_n.interpolate(rho_expression)
         
         # Initialisation de l'énergie totale
+        rhoE_expr = conditional(lt(x[0], x_diaphragme), rhoE_gauche, rhoE_droite)
         rhoE_expression = Expression(rhoE_expr, self.V_E.element.interpolation_points())
         self.rhoE.interpolate(rhoE_expression)
         self.rhoE_n.interpolate(rhoE_expression)
@@ -114,8 +114,8 @@ class SodShockTube(CompressibleEuler):
         return {"rho": True, "Pressure":True}
     
 pb = SodShockTube(Gaz)
-Solve(pb, dirk_method="BDF1", TFin=t_end, dt=dt)
-# Solve(pb, dirk_method="SDIRK5", TFin=t_end, dt=dt)
+# Solve(pb, dirk_method="BDF1", TFin=t_end, dt=dt)
+Solve(pb, dirk_method="SDIRK5", TFin=t_end, dt=dt)
 
 import sod_shock_analytic
 

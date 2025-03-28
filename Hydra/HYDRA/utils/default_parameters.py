@@ -20,6 +20,18 @@ def default_fem_parameters():
     fem.update({"schema" : "default"})
     return fem
 
+def default_Riemann_solver_parameters():
+    """
+    Type de flux numérique à utiliser. Options:
+    - "Cockburn": Flux upwind simple avec pénalisation
+    - "Rusanov": Flux de type Rusanov (Local Lax-Friedrichs)
+    - "HLL": Approximation de Harten-Lax-van Leer
+    - "HLLC": HLL avec restauration de l'onde de contact
+    """
+    riemann_solver = {}
+    riemann_solver.update({"flux_type": "HLL"})
+    return riemann_solver
+
 def default_Newton_parameters():
     solver_u = {}
     solver_u.update({"ksp_type": "preonly"})

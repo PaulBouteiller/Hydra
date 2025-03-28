@@ -10,7 +10,7 @@ from..utils.generic_functions import extract_primitive_variables
 class EOS:
     def __init__(self, kinematic, quadrature):
         """
-        Classe contenant toutes les équations d'état disponible du code CHARON.
+        Classe contenant toutes les équations d'état disponible du code Hydra.
         Le type d'équation d'état est entièrement déterminé lors de la création
         d'un objet de la classe Material.
 

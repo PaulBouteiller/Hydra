@@ -4,9 +4,8 @@ Created on Mon Jan 27 18:22:27 2025
 @author: bouteillerp
 """
 from .Euler import CompressibleEuler, EulerBoundaryConditions
-from ufl import inner, dot, dev, div
 from dolfinx.fem import functionspace, Function
-from ufl import MixedFunctionSpace, TestFunctions, TrialFunctions
+from ufl import (inner, dot, dev, div, MixedFunctionSpace, TestFunctions, TrialFunctions)
 from petsc4py.PETSc import ScalarType
 
 class NavierStokesBoundaryConditions(EulerBoundaryConditions):
@@ -36,7 +35,6 @@ class CompressibleNavierStokes(CompressibleEuler):
         super().set_functions() 
         self.L = Function(self.V_L, name = "Velocity_gradient")
         
-        
     def set_variable_to_solve(self):
         super().set_variable_to_solve()
         if self.iso_T:
@@ -44,24 +42,23 @@ class CompressibleNavierStokes(CompressibleEuler):
         else:
             self.u_list.insert(3, self.L)
         
-        
     def set_test_functions(self):
         MFS = MixedFunctionSpace(self.V_rho, self.V_v, self.V_E, self.V_L, 
                                  self.V_rhobar, self.V_vbar, self.V_Ebar)  
-        rho_test, u_test, E_test, L_test, rhobar_test, ubar_test, Ebar_test = TestFunctions(MFS)
-        drho, du, dE, dL, drhobar, dubar, dEbar = TrialFunctions(MFS)
-        self.U_test = [rho_test, u_test, E_test]
-        self.Ubar_test = [rhobar_test, ubar_test, Ebar_test]
-        self.dU = [drho, du, dE]
-        self.dUbar = [drhobar, dubar, dEbar]
-        self.L_test = L_test
+        rho_, rhou_, rhoE_, L_, rhobar_, rhoubar_, rhoEbar_ = TestFunctions(MFS)
+        drho, drhou, drhoE, dL, drhobar, drhoubar, drhoEbar = TrialFunctions(MFS)
+        self.U_ = [rho_, rhou_, rhoE_]
+        self.Ubar_ = [rhobar_, rhoubar_, rhoEbar_]
+        self.dU = [drho, drhou, drhoE]
+        self.dUbar = [drhobar, drhoubar, drhoEbar]
+        self.L_ = L_
         self.dL = dL
         if self.iso_T:
             self.du_list = self.dU[:2] + [self.dL] + self.dUbar[:2]
-            self.u_test_list = self.U_test[:2] + [self.L_test] + self.Ubar_test[:2]
+            self.u_test_list = self.U_test[:2] + [self.L_] + self.Ubar_test[:2]
         else:
             self.du_list = self.dU + [self.dL] + self.dUbar
-            self.u_test_list = self.U_test + [self.L_test] + self.Ubar_test
+            self.u_test_list = self.U_test + [self.L_] + self.Ubar_test
     
     def flux(self, U):
         return self.inviscid_flux(U) + self.viscous_flux(U)
@@ -74,9 +71,9 @@ class CompressibleNavierStokes(CompressibleEuler):
     def gradient_residual(self):
         u = self.U[1] / self.U[0]
         ubar = self.Ubar[1] / self.Ubar[0]
-        vol_form = inner(self.L, self.L_test) * self.dx_c
-        vol_form += inner(u, div(self.L_test)) * self.dx_c
-        surf_form = -inner(ubar, dot(self.L_test, self.n)) * self.ds_tot
+        vol_form = inner(self.L, self.L_) * self.dx_c
+        vol_form += inner(u, div(self.L_)) * self.dx_c
+        surf_form = -inner(ubar, dot(self.L_, self.n)) * self.ds_tot
         return vol_form + surf_form
 
     def set_form(self):

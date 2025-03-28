@@ -3,13 +3,15 @@ Created on Mon Jan 27 18:22:27 2025
 
 @author: bouteillerp
 """
-from .Problem import Problem, BoundaryConditions
-from ..utils.generic_functions import euler_eigenvalues_2D,  max_abs_of_sequence
-from ufl import outer, grad, Identity, inner, dot
-from ufl import MixedFunctionSpace, TestFunctions, TrialFunctions
+from ufl import (outer, grad, Identity, inner, dot, MixedFunctionSpace, 
+                 TestFunctions, TrialFunctions)
 from petsc4py.PETSc import ScalarType
 from dolfinx.fem import functionspace, Function
+
+from .Problem import Problem, BoundaryConditions
+from ..utils.generic_functions import euler_eigenvalues_2D, max_abs_of_sequence
 from..utils.generic_functions import extract_primitive_variables
+from ..utils.default_parameters import default_Riemann_solver_parameters
 
 class EulerBoundaryConditions(BoundaryConditions):
     def __init__(self, U, Ubar, Ubar_test, facet_mesh, S, n, ds, tdim, entity_maps, facet_tag, dico_Vbar):
@@ -73,10 +75,10 @@ class CompressibleEuler(Problem):
         Initialise les espaces fonctionnels
         """
         self.V_rho = functionspace(self.mesh, ("DG", self.deg))
-        self.V_v = functionspace(self.mesh, ("DG", self.deg, (self.tdim ,)))
+        self.V_v = functionspace(self.mesh, ("DG", self.deg, (self.tdim, )))
         self.V_E = self.V_rho
         self.V_rhobar = functionspace(self.facet_mesh, ("DG", self.deg))
-        self.V_vbar = functionspace(self.facet_mesh, ("DG", self.deg, (self.tdim ,)))
+        self.V_vbar = functionspace(self.facet_mesh, ("DG", self.deg, (self.tdim, )))
         self.V_Ebar = self.V_rhobar
        
     def set_functions(self):   
@@ -115,12 +117,12 @@ class CompressibleEuler(Problem):
         """
         MFS = MixedFunctionSpace(self.V_rho, self.V_v, self.V_E,
                                  self.V_rhobar, self.V_vbar, self.V_Ebar)  
-        rho_test, u_test, E_test, rhobar_test, ubar_test, Ebar_test = TestFunctions(MFS)
-        drho, du, dE, drhobar, dubar, dEbar = TrialFunctions(MFS)
-        self.U_test = [rho_test, u_test, E_test]
-        self.Ubar_test = [rhobar_test, ubar_test, Ebar_test]
-        self.dU = [drho, du, dE]
-        self.dUbar = [drhobar, dubar, dEbar]
+        rho_, rhou_, rhoE_, rhobar_, rhoubar_, rhoEbar_ = TestFunctions(MFS)
+        drho, drhou, drhoE, drhobar, drhoubar, drhoEbar = TrialFunctions(MFS)
+        self.U_test = [rho_, rhou_, rhoE_]
+        self.Ubar_test = [rhobar_, rhoubar_, rhoEbar_]
+        self.dU = [drho, drhou, drhoE]
+        self.dUbar = [drhobar, drhoubar, drhoEbar]
         if self.iso_T:
             self.du_list = self.dU[:2] + self.dUbar[:2]
             self.u_test_list = self.U_test[:2] + self.Ubar_test[:2]
@@ -158,11 +160,6 @@ class CompressibleEuler(Problem):
         """Renvoie le flux d'energie massique (ρE + p)u"""
         return (U[2] + p) * U[1]/U[0]
     
-    def set_dynamic_residual(self):
-        """Renvoie le résidu associé à la dynamique implicite avec facteur de temps ajustable"""
-        return sum(inner((x - x_n) * self.dt_factor, x_test) * self.dx_c 
-                   for x, x_n, x_test in zip(self.U, self.U_n, self.U_test))
-    
     def set_dynamic_lhs(self):
         return sum(inner(x * self.dt_factor, x_test) * self.dx_c 
                    for x, x_test in zip(self.U, self.U_test))
@@ -175,7 +172,7 @@ class CompressibleEuler(Problem):
         return -sum(inner(flux, grad(test_func)) * self.dx_c 
                     for flux, test_func in zip(U_flux, self.U_test))        
         
-    def set_numerical_flux(self, U_flux, Ubar_flux, flux_type="HLL"):
+    def set_numerical_flux(self, U_flux, Ubar_flux):
         """
         Calcule le flux numérique à travers les interfaces entre éléments.
         
@@ -186,22 +183,14 @@ class CompressibleEuler(Problem):
         
         Parameters
         ----------
-        U_flux : list[ufl.Expr]
-            Flux associés aux variables U à l'intérieur de l'élément
-        Ubar_flux : list[ufl.Expr]
-            Flux associés aux variables Ubar aux interfaces
-        flux_type : str, optional
-            Type de flux numérique à utiliser. Options:
-            - "Cockburn": Flux upwind simple avec pénalisation
-            - "Rusanov": Flux de type Rusanov (Local Lax-Friedrichs)
-            - "HLL": Approximation de Harten-Lax-van Leer
-            - "HLLC": HLL avec restauration de l'onde de contact
-            
+        U_flux : list[ufl.Expr] Flux associés aux variables U à l'intérieur de l'élément
+        Ubar_flux : list[ufl.Expr] Flux associés aux variables Ubar aux interfaces
         Returns
         -------
-        list[ufl.Expr]
-            Liste des flux numériques pour chaque équation de conservation
+        list[ufl.Expr] Liste des flux numériques pour chaque équation de conservation
         """
+        riemann_solvers_dic = default_Riemann_solver_parameters() 
+        flux_type = riemann_solvers_dic.get("flux_type")
         if flux_type == "Cockburn":
             return [dot(flux_bar, self.n) + self.S * (x - x_bar) 
                     for flux_bar, x, x_bar in zip(Ubar_flux, self.U, self.Ubar)]
@@ -214,7 +203,6 @@ class CompressibleEuler(Problem):
             riemann = RiemannSolvers(self.EOS, self.material)
             return riemann.hll_flux(self.U, self.Ubar, U_flux, Ubar_flux, self.n)
         elif flux_type == "HLLC":
-            # raise ValueError("Currently buggued")
             from .riemann_solvers import RiemannSolvers
             riemann = RiemannSolvers(self.EOS, self.material)
             return riemann.hllc_flux(self.U, self.Ubar, U_flux, Ubar_flux, self.n)
@@ -270,9 +258,6 @@ class CompressibleEuler(Problem):
         boundary_res = self.bc_class.boundary_residual
         self.residual = vol_res + surf_res + boundary_res
         
-        
-        self.residual+= self.set_dynamic_lhs()
-        self.residual-=self.set_dynamic_source()
-        
-        # if self.analysis == "dynamic":
-        #     self.residual += self.set_dynamic_residual()
+        if self.analysis == "dynamic":        
+            self.residual+= self.set_dynamic_lhs()
+            self.residual-=self.set_dynamic_source()

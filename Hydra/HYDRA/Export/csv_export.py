@@ -30,7 +30,7 @@ class OptimizedCSVExport:
 
     def initialize_export_settings(self):
         self.setup_velocity_export()
-        self.setup_temperature_export()
+        self.setup_energy_export()
         self.setup_pressure_export()
         self.setup_density_export()
             
@@ -50,8 +50,8 @@ class OptimizedCSVExport:
         else:
             self.csv_export_v = False            
 
-    def setup_temperature_export(self):
-        if "T" in self.dico_csv:
+    def setup_energy_export(self):
+        if "E" in self.dico_csv:
             self.csv_export_T = True
             self.T_dte = self.dofs_to_exp(self.pb.V_T, self.dico_csv.get("T"))
             self.coordinate_data["T"] = self.get_coordinate_data(self.pb.V_T, self.T_dte)

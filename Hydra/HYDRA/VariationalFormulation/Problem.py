@@ -5,6 +5,7 @@ Created on Fri Mar 11 09:36:05 2022
 """
 from ..ConstitutiveLaw.eos import EOS
 from ..utils.default_parameters import default_fem_parameters
+from ..utils.MyExpression import MyConstant
 
 from numpy import (hstack, argsort, finfo, full_like, arange, int32, unique, 
                     tile, repeat, vstack, full, zeros, array)
@@ -14,10 +15,10 @@ from dolfinx.fem import (compute_integration_domains, dirichletbc, locate_dofs_t
 from dolfinx.mesh import meshtags, create_submesh, locate_entities
 from ufl import (Measure, inner, FacetNormal)
 
-from mpi4py import MPI
+from mpi4py.MPI import COMM_WORLD
 from dolfinx.cpp.mesh import cell_num_entities
 from petsc4py.PETSc import ScalarType
-from ..utils.MyExpression import MyConstant
+
 
 from dolfinx.log import set_log_level
 from dolfinx.cpp.log import LogLevel
@@ -104,7 +105,7 @@ class Problem:
             self.mesh = self.define_mesh()
         else:
             self.mesh = initial_mesh
-        if MPI.COMM_WORLD.Get_size()>1:
+        if COMM_WORLD.Get_size()>1:
             print("Parallel computation")
             self.mpi_bool = True
         else:
@@ -136,8 +137,6 @@ class Problem:
         self.set_test_functions()
         self.set_stabilization_parameters(**kwargs)
 
-
-            
         # Constitutive Law
         self.EOS = EOS(None, None)
         self.material.c = self.EOS.set_celerity(self.U, self.material)
@@ -369,7 +368,6 @@ class Problem:
         Initialise quelques champs auxiliaires qui permettent d'écrire de 
         manière plus concise le problème thermo-mécanique
         """
-        # rho, u, E = self.U[0], self.U[1]/self.U[0], self.U[2]/self.U[0]
         p = self.EOS.set_eos(self.U, self.material)
         self.p_expr = Expression(p, self.V_rho.element.interpolation_points())
         self.p_func = Function(self.V_rho, name = "Pression")
@@ -441,8 +439,6 @@ class Problem:
     
     def set_artifial_pressure(self):
         from ..ConstitutiveLaw.artificial_pressure import ArtificialPressure
-        from ..utils.generic_functions import extract_primitive_variables
-        rho, u, E = extract_primitive_variables(self.U)
         h = self.calculate_mesh_size()
         c = self.EOS.set_celerity(self.U, self.material)
         self.artificial_pressure = ArtificialPressure(self.U, self.V_rho, h, c, self.deg, self.shock_sensor)

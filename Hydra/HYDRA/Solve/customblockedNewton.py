@@ -50,6 +50,9 @@ class BlockedNewtonSolver(NewtonSolver):
             for k, v in petsc_options.items():
                 opts[k] = v
             opts.prefixPop()
+
+            self.krylov_solver.rtol = petsc_options.get("relative_tolerance")
+            self.krylov_solver.atol = petsc_options.get("absolute_tolerance")
             self.krylov_solver.setFromOptions()
         self._F = F
         self._a = J
@@ -71,6 +74,11 @@ class BlockedNewtonSolver(NewtonSolver):
         self.setF(self._assemble_residual, self._b)
         self.set_form(self._pre_newton_iteration)
         self.set_update(self._update_function)
+
+        # if rtol is not None:
+        self.atol = petsc_options.get("absolute_tolerance")
+        # if rtol is not None:
+        self.rtol = petsc_options.get("relative_tolerance")
 
     def set_pre_solve_callback(self, callback: Callable[["BlockedNewtonSolver"], None]):
         """Set a callback function that is called before each Newton iteration."""

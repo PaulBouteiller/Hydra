@@ -21,14 +21,14 @@ p_droite = 0.1
         
 # Calcul de l'énergie interne spécifique (e) à partir de l'équation d'état du gaz parfait e = p/(rho*(gamma-1))
 rhoE_gauche = p_gauche / (gamma - 1.0)
-rhoE_droite = p_droite / (gamma - 1.0)
+rhoE_droite2025032600224 = p_droite / (gamma - 1.0)
 
 dico_eos = {"gamma": gamma}  # équation d'état de type gaz parfait
 dico_devia = {}
 Gaz = Material(rho0, 1, "GP", None, dico_eos, dico_devia)
 
 #Degré d'interpolation #~Volumes finis si degré 0.
-degree = 1
+degree = 2
     
 Nx = int(500 / (degree + 1))
 
@@ -113,13 +113,14 @@ class SodShockTube(CompressibleEuler):
     
 pb = SodShockTube(Gaz)
 Solve(pb, dirk_method="BDF1", TFin=t_end, dt=dt)
+# Solve(pb, dirk_method="SDIRK212", TFin=t_end, dt=dt)
 # Solve(pb, dirk_method="SDIRK5", TFin=t_end, dt=dt)
 
 import sod_shock_analytic
 
 # Paramètres de la simulation
 dustFrac = 0.0  # fraction de poussière (0 = gaz pur)
-npts = 500  # nombre de points pour la discrétisation
+npts = 1000  # nombre de points pour la discrétisation
 left_state = (p_gauche, rho_gauche, 0)  # état gauche (pression, densité, vitesse)
 right_state = (p_droite, rho_droite, 0.)  # état droit (pression, densité, vitesse)
 

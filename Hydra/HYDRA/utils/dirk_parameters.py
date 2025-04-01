@@ -396,6 +396,8 @@ class DIRKParameters:
             self.b = self.A[6, :]
             
             self.order = 5
+        else:
+            raise ValueError("Unknown DIRK Method")
  
         self.num_stages = len(self.b)
         self.method = method

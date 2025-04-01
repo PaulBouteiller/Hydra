@@ -4,7 +4,7 @@ Created on Fri Mar 11 09:36:05 2022
 @author: bouteillerp
 """
 from ..ConstitutiveLaw.eos import EOS
-from ..utils.default_parameters import default_fem_parameters
+from ..utils.default_parameters import default_fem_parameters, default_shock_capturing_parameters
 from ..utils.MyExpression import MyConstant
 
 from numpy import (hstack, argsort, finfo, full_like, arange, int32, unique, 
@@ -27,7 +27,7 @@ set_log_level(LogLevel.WARNING)
 class BoundaryConditions:
     def __init__(self, U, Ubar, Ubar_test, facet_mesh, S, n, ds, tdim, entity_maps, facet_tag):
         self.U, self.Ubar, self.Ubar_test = U, Ubar, Ubar_test
-        self.S = S
+        self.EOS = EOS
         self.ds = ds
         self.n = n
         self.boundary_residual = Constant(facet_mesh, ScalarType(0)) * Ubar_test[0] * ds
@@ -112,6 +112,7 @@ class MeshManager:
         self.tdim = mesh.topology.dim
         self.fdim = self.tdim - 1
         self.n = FacetNormal(mesh)
+        self.h = self.calculate_mesh_size()
         
         # Créer le sous-maillage des facettes et les mappages d'entités
         self.facet_mesh, self.entity_maps = self.create_facet_mesh()
@@ -208,8 +209,7 @@ class MeshManager:
         
         Returns
         -------
-        numpy.ndarray
-            Facettes à intégrer, identifiées par des paires (cellule, indice local de facette).
+        numpy.ndarray Facettes à intégrer, identifiées par des paires (cellule, indice local de facette).
         """
         n_f = cell_num_entities(self.mesh.topology.cell_type, self.fdim)
         n_c = self.mesh.topology.index_map(self.tdim).size_local   
@@ -225,9 +225,8 @@ class MeshManager:
         
         Parameters
         ----------
-        deg : int
-            Degré polynomial des fonctions de forme, utilisé pour déterminer
-            le degré de quadrature.
+        deg : int Degré polynomial des fonctions de forme, utilisé pour déterminer
+                    le degré de quadrature.
         """
         # Calculer toutes les facettes de cellules
         n_f = cell_num_entities(self.mesh.topology.cell_type, self.fdim)
@@ -250,7 +249,8 @@ class MeshManager:
                 facet_integration_entities.append((tag, entities))
         
         # Degrés de quadrature
-        quad_deg_facet = (2 * deg + 1) ** (self.tdim)
+        quad_deg_facet = (deg + 1) ** (self.tdim - 1)
+        # quad_deg_facet = (2 * deg + 1) ** (self.tdim)
         quad_deg_volume = (deg + 1) ** self.tdim
         print(f"Nombre de points de Gauss: {quad_deg_volume}")
         
@@ -261,6 +261,23 @@ class MeshManager:
         
         # Mesure spécifique pour toutes les facettes
         self.ds_tot = self.ds_c(cell_boundaries_tag)
+        
+    def calculate_mesh_size(self):
+        """
+        Calcule la taille locale des éléments du maillage.
+        
+        Returns
+        -------
+        Function  Fonction contenant la taille locale des éléments.
+        """
+        h_loc = Function(functionspace(self.mesh, ("DG", 0)), name="MeshSize")
+        num_cells = self.mesh.topology.index_map(self.tdim).size_local
+        h_local = zeros(num_cells)
+        for i in range(num_cells):
+            h_local[i] = self.mesh.h(self.tdim, array([i]))
+        
+        h_loc.x.array[:] = h_local
+        return h_loc
 
 class Problem:
     """
@@ -292,6 +309,7 @@ class Problem:
         self.facet_mesh = self.mesh_manager.facet_mesh
         self.entity_maps = self.mesh_manager.entity_maps
         self.n = self.mesh_manager.n
+        self.h = self.mesh_manager.h
 
         # Set parameters and update from user
         self.fem_parameters()
@@ -310,20 +328,20 @@ class Problem:
         self.set_functions()
         self.set_variable_to_solve()
         self.set_test_functions()
-        self.set_stabilization_parameters(**kwargs)
+        self.shock_param = default_shock_capturing_parameters()
+        self.shock_stabilization = self.shock_param.get("use_shock_capturing") and self.deg>0
+        if self.shock_stabilization:
+            self.set_stabilization_parameters(self.shock_param.get("shock_sensor_type"))
 
         # Constitutive Law
         self.EOS = EOS(None, None)
-        self.material.c = self.EOS.set_celerity(self.U, self.material)
-        self.material.c_bar = self.EOS.set_celerity(self.U, self.material)
-        self.set_artifial_pressure()
+        # self.set_artifial_pressure()
         self.set_auxiliary_field()
         
         #Boundary conditions
-        self.S = self.set_stabilization_matrix(self.U, self.Ubar, self.material.c, self.n)
         self.bc_class = self.boundary_conditions_class()(
                         self.U, self.Ubar, self.Ubar_test,
-                        self.facet_mesh, self.S, self.n, self.ds_c,
+                        self.facet_mesh, self.EOS, self.n, self.ds_c,
                         self.tdim, self.entity_maps, self.facet_tag, self.dico_Vbar
                     )
         self.bcs = []
@@ -364,9 +382,11 @@ class Problem:
         Initialise quelques champs auxiliaires qui permettent d'écrire de 
         manière plus concise le problème thermo-mécanique
         """
-        p = self.EOS.set_eos(self.U, self.material)
-        self.p_expr = Expression(p, self.V_rho.element.interpolation_points())
+        p_elem = self.EOS.set_eos(self.U, self.material)
+        self.p_expr = Expression(p_elem, self.V_rho.element.interpolation_points())
         self.p_func = Function(self.V_rho, name = "Pression")
+        
+        
         
         
     def fem_parameters(self):
@@ -379,64 +399,13 @@ class Problem:
     def update_bcs(self, num_pas):
         pass
     
-    def set_stabilization_parameters(self, **kwargs):
+    def set_stabilization_parameters(self, shock_sensor_type):
         """
         Initialise les paramètres pour la stabilisation par viscosité artificielle.
-        
-        Parameters
-        ----------
-        **kwargs : Dictionnaire de paramètres optionnels
-            use_shock_capturing : bool Activer la capture de choc (défaut: True)
-            shock_sensor_type : str Type de capteur de choc ('ducros', ou 'none') (défaut: 'ducros')
-            shock_threshold : float Seuil pour le capteur de Ducros (défaut: 0.95)
-            shock_viscosity_coeff : float Coefficient pour la viscosité artificielle (défaut: 0.5)
         """
-        # Paramètres pour la viscosité artificielle
-        self.use_shock_capturing = kwargs.get("use_shock_capturing", True)
-        self.shock_sensor_type = kwargs.get("shock_sensor_type", "ducros")
-        self.shock_threshold = kwargs.get("shock_threshold", 0.95)
-        self.shock_viscosity_coeff = kwargs.get("shock_viscosity_coeff", 0.5)
-        
-        # Créer l'espace fonctionnel pour la viscosité artificielle
-        self.V_art = functionspace(self.mesh, ("DG", self.deg))
-        self.mu_art = Function(self.V_art, name="ArtificialViscosity")
-        
-        # Initialiser le capteur de choc approprié
-        if self.use_shock_capturing:
-            if self.shock_sensor_type.lower() == "ducros":
-                from ..VariationalFormulation.shock_sensor import DucrosShockSensor
-                self.shock_sensor = DucrosShockSensor(self, threshold=self.shock_threshold)
-            elif self.shock_sensor_type.lower() == "fernandez":
-                from ..VariationalFormulation.shock_sensor import FernandezShockSensor
-                self.shock_sensor = FernandezShockSensor(self, threshold=self.shock_threshold)
-            else:
-                self.shock_sensor = None
-                
-    def calculate_mesh_size(self):
-        """
-        Calcule la taille locale des éléments du maillage.
-        
-        Returns
-        -------
-        Function  Fonction contenant la taille locale des éléments.
-        """
-        h_loc = Function(functionspace(self.mesh, ("DG", 0)), name="MeshSize")                
-        
-        # Calculer la taille locale des éléments
-        tdim = self.tdim
-        num_cells = self.mesh.topology.index_map(tdim).size_local
-        h_local = zeros(num_cells)
-        
-        for i in range(num_cells):
-            h_local[i] = self.mesh.h(tdim, array([i]))
-        
-        h_loc.x.array[:] = h_local
-        return h_loc
-    
-    def set_artifial_pressure(self):
-        """Initialise le mécanisme de pression artificielle pour la stabilisation des chocs
-        et éviter les oscillations non physiques."""
-        from ..ConstitutiveLaw.artificial_pressure import ArtificialPressure
-        h = self.calculate_mesh_size()
-        c = self.EOS.set_celerity(self.U, self.material)
-        self.artificial_pressure = ArtificialPressure(self.U, self.V_rho, h, c, self.deg, self.shock_sensor)
+        if shock_sensor_type == "ducros":
+            from ..VariationalFormulation.shock_sensor import DucrosShockSensor
+            self.shock_sensor = DucrosShockSensor(self)
+        elif shock_sensor_type == "fernandez":
+            from ..VariationalFormulation.shock_sensor import FernandezShockSensor
+            self.shock_sensor = FernandezShockSensor(self)

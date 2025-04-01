@@ -3,9 +3,14 @@ Created on Thu Jun 23 10:47:33 2022
 
 @author: bouteillerp
 """
-
+from ufl import div, inner
+from dolfinx.fem import Expression
 from ufl import dot, sqrt
-from..utils.generic_functions import extract_primitive_variables
+from ..utils.generic_functions import extract_primitive_variables
+from ..utils.default_parameters import default_viscosity_parameters
+
+def npart(x):
+    return (x - abs(x))/2
 
 class EOS:
     def __init__(self, kinematic, quadrature):
@@ -35,7 +40,6 @@ class EOS:
             p = -eos_param.kappa * (mat.rho_0/rho - 1)
         elif mat.eos_type == "GP":
             p = (eos_param.gamma - 1) * rho * (E - 1./2 * dot(u, u))
-            # p = (eos_param.gamma - 1) * U[2] - 1./2 * dot(U[1], U[1]) / U[0]
         else:
             raise ValueError("Unknwon eos")
         return p
@@ -53,3 +57,11 @@ class EOS:
         else:
             raise ValueError("Unknwon eos")
         return c
+    
+    def set_artifial_pressure(self, U, V_quad, mat, h, deg, sensor):
+        rho, u, _ = extract_primitive_variables(U)
+        c = self.set_celerity(U, mat)
+        coeff = default_viscosity_parameters().get("coefficient")
+        # p_star = coeff * rho * h / (deg + 1) * (inner(u, u) + c**2)**0.5 * sensor.sensor_expr * npart(div(u))
+        p_star = coeff * rho * h / (deg + 1) * (inner(u, u) + c**2)**0.5 * sensor.sensor_expr * div(u)
+        return Expression(p_star, V_quad.element.interpolation_points())

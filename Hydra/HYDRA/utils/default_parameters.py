@@ -30,6 +30,7 @@ def default_Riemann_solver_parameters():
     """
     riemann_solver = {}
     riemann_solver.update({"flux_type": "HLL"})
+    riemann_solver.update({"signal_speed_type" : "davis"})
     return riemann_solver
 
 def default_Newton_parameters():
@@ -37,11 +38,29 @@ def default_Newton_parameters():
     solver_u.update({"ksp_type": "preonly"})
     solver_u.update({"pc_type": "lu"})
     solver_u.update({"pc_factor_mat_solver_type" : "mumps"})
-    solver_u.update({"relative_tolerance" : 1e-8})
-    solver_u.update({"absolute_tolerance" : 1e-8})
+    solver_u.update({"relative_tolerance" : 1e-6})
+    solver_u.update({"absolute_tolerance" : 1e-6})
     solver_u.update({"convergence_criterion" : "incremental"})
     solver_u.update({"maximum_iterations" : 50})
+    solver_u.update({"pc_factor_mat_solver_type": "mumps",
+            # Activation de BLR (Block Low-Rank) pour MUMPS
+            "mat_mumps_icntl_35": 1,
+            "mat_mumps_cntl_7": 1e-8  # Tolérance BLR
+        })
     return solver_u
+
+def default_shock_capturing_parameters():
+    shock_sensor = {}
+    shock_sensor.update({"use_shock_capturing" : False})
+    shock_sensor.update({"shock_sensor_type" : "ducros"})
+    shock_sensor.update({"shock_threshold" : 0.95})
+    return shock_sensor
+
+def default_viscosity_parameters():
+    viscosity = {}
+    viscosity.update({"coefficient" : 1e-2})
+    return viscosity
+    
 
 def default_post_processing_parameters():
     post_processing = {}

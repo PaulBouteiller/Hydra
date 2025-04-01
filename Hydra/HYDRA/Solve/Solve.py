@@ -107,20 +107,13 @@ class Solve:
         
         # Configuration des options PETSc
         petsc_options = default_Newton_parameters()
-        petsc_options.update({
-            "pc_factor_mat_solver_type": "mumps",
-            # Activation de BLR (Block Low-Rank) pour MUMPS
-            "mat_mumps_icntl_35": 1,
-            "mat_mumps_cntl_7": 1e-8  # Tolérance BLR
-        })
-        
         # Création du solveur
         self.solver = BlockedNewtonSolver(
             Fr_form, 
             self.pb.u_list, 
             J_form, 
             bcs=self.pb.bc_class.bcs, 
-            petsc_options=petsc_options, 
+            petsc_options = petsc_options, 
             entity_maps=self.pb.entity_maps
         )
         
@@ -185,9 +178,9 @@ class Solve:
                 if space_idx == 0:  # Densité
                     space = self.pb.V_rho
                 elif space_idx == 1:  # Vitesse
-                    space = self.pb.V_v
+                    space = self.pb.V_rhov
                 else:  # Énergie ou autres variables
-                    space = self.pb.V_rho
+                    space = self.pb.V_rhoE
                 
                 # Créer les fonctions pour cette étape
                 stage_sol.append(Function(space))
@@ -443,4 +436,6 @@ class Solve:
         
         # Mise à jour de la viscosité artificielle basée sur le nouvel état
         # Désactivée par défaut, décommenter si nécessaire
-        self.pb.artificial_pressure.compute_artificial_pressure()
+        if self.pb.shock_stabilization:
+            # raise ValueError("Actuellement buggué")
+            self.pb.p_star_U.interpolate(self.pb.p_star_U_expr)

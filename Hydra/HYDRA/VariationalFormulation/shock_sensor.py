@@ -5,7 +5,7 @@ Created on Fri Mar  7 11:10:20 2025
 """
 
 from ufl import div, curl, sqrt, conditional, ge, inner
-from dolfinx.fem import Function, functionspace
+# from dolfinx.fem import Function, functionspace
 
 from..utils.generic_functions import extract_primitive_variables
 
@@ -23,14 +23,8 @@ class ShockSensor:
         problem : Objet de la classe Problem
             Le problème pour lequel le capteur de choc est défini.
         """
-        self.problem = problem
-        self.mesh = problem.mesh
-        self.tdim = problem.tdim
-        
+        self.problem = problem        
         self.epsilon = 1e-10
-        self.V_shock = functionspace(self.mesh, ("DG", problem.deg))
-        self.shock_indicator = Function(self.V_shock, name="ShockIndicator")
-        self.p_star = Function(self.V_shock, name="ShockIndicator")
         
     def compute_sensor_function(self):
         """
@@ -125,7 +119,7 @@ class FernandezShockSensor(ShockSensor):
         
         curl_norm = sqrt(inner(velocity_curl, velocity_curl))
         s_vort = abs(velocity_div) / (abs(velocity_div) + curl_norm + self.epsilon)
-        h = self.problem.calculate_mesh_size()
+        h = self.problem.h
         c = self.problem.material.celerity
         s_div = -h * velocity_div / (k * c)
         hat_s = s_div * s_vort

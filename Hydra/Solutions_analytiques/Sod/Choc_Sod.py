@@ -21,14 +21,14 @@ p_droite = 0.1
         
 # Calcul de l'énergie interne spécifique (e) à partir de l'équation d'état du gaz parfait e = p/(rho*(gamma-1))
 rhoE_gauche = p_gauche / (gamma - 1.0)
-rhoE_droite2025032600224 = p_droite / (gamma - 1.0)
+rhoE_droite = p_droite / (gamma - 1.0)
 
 dico_eos = {"gamma": gamma}  # équation d'état de type gaz parfait
 dico_devia = {}
 Gaz = Material(rho0, 1, "GP", None, dico_eos, dico_devia)
 
 #Degré d'interpolation #~Volumes finis si degré 0.
-degree = 2
+degree = 0
     
 Nx = int(500 / (degree + 1))
 
@@ -85,7 +85,7 @@ class SodShockTube(CompressibleEuler):
         
         # Initialisation de l'énergie totale
         rhoE_expr = conditional(lt(x[0], x_diaphragme), rhoE_gauche, rhoE_droite)
-        rhoE_expression = Expression(rhoE_expr, self.V_E.element.interpolation_points())
+        rhoE_expression = Expression(rhoE_expr, self.V_rhoE.element.interpolation_points())
         self.rhoE.interpolate(rhoE_expression)
         self.rhoE_n.interpolate(rhoE_expression)
 
@@ -97,7 +97,7 @@ class SodShockTube(CompressibleEuler):
         rhobar_expression = Expression(rho_facet_expr, self.V_rhobar.element.interpolation_points())
         self.rhobar.interpolate(rhobar_expression)
         
-        rhoEbar_expression = Expression(rhoE_facet_expr, self.V_Ebar.element.interpolation_points())
+        rhoEbar_expression = Expression(rhoE_facet_expr, self.V_rhoEbar.element.interpolation_points())
         self.rhoEbar.interpolate(rhoEbar_expression)
 
     def set_output(self):
@@ -111,8 +111,8 @@ class SodShockTube(CompressibleEuler):
         # Variables à exporter 
         return {"rho": True, "Pressure":True}
     
-pb = SodShockTube(Gaz)
-Solve(pb, dirk_method="BDF1", TFin=t_end, dt=dt)
+# pb = SodShockTube(Gaz)
+# Solve(pb, dirk_method="BDF1", TFin=t_end, dt=dt)
 # Solve(pb, dirk_method="SDIRK212", TFin=t_end, dt=dt)
 # Solve(pb, dirk_method="SDIRK5", TFin=t_end, dt=dt)
 
@@ -124,29 +124,6 @@ npts = 1000  # nombre de points pour la discrétisation
 left_state = (p_gauche, rho_gauche, 0)  # état gauche (pression, densité, vitesse)
 right_state = (p_droite, rho_droite, 0.)  # état droit (pression, densité, vitesse)
 
-# Calculer la solution
-positions, regions, values = sod_shock_analytic.solve(
-    left_state=left_state, 
-    right_state=right_state, 
-    geometry=(0., 1., 0.5),  # frontières gauche, droite et position du choc
-    t=t_end, 
-    gamma=gamma, 
-    npts=npts, 
-    dustFrac=dustFrac
-)
-
-# Afficher les positions des différentes caractéristiques
-print('Positions:')
-for desc, vals in positions.items():
-    print('{0:10} : {1}'.format(desc, vals))
-
-# Afficher les valeurs dans les différentes régions
-print('Regions:')
-for region, vals in sorted(regions.items()):
-    print('{0:10} : {1}'.format(region, vals))
-
-# Tracer les résultats
-f, axarr = plt.subplots(2, sharex=True)
 
 
 rho_df = read_csv("SodShockTube-results/rho.csv")
@@ -154,7 +131,7 @@ rho_result = [rho_df[colonne].to_numpy() for colonne in rho_df.columns]
 if degree !=0:
     y = rho_result[1]
     mask = y<=1e-10
-    rho_array = rho_result[-1][mask] 
+    
     x_array = rho_result[0][mask]
 else:
     rho_array = rho_result[-1]
@@ -165,23 +142,53 @@ p_result = [p_df[colonne].to_numpy() for colonne in p_df.columns]
 if degree !=0:
     y = rho_result[1]
     mask_p = y<=1e-10
-    p_array = p_result[-1][mask_p] 
     xp_array = p_result[0][mask_p]
 else:
     p_array = p_result[-1] 
     xp_array = p_result[0]   
 
+t_list = np.linspace(0, t_end, 101)
 
-axarr[0].plot(values['x'], values['p'], linewidth=1.5, color='b')
-axarr[0].plot(xp_array, p_array, linewidth=1.5, color='g')
-axarr[0].set_ylabel('pressure')
-axarr[0].set_ylim(0, 1.1)
+for i, t in enumerate(t_list):
+    if degree !=0:
+        p_array = p_result[i+2][mask_p] 
+        rho_array = rho_result[i+2][mask]
 
-axarr[1].plot(values['x'], values['rho'], linewidth=1.5, color='r')
-axarr[1].plot(x_array, rho_array, linewidth=1.5, color='g')
-axarr[1].set_ylabel('density')
-axarr[1].set_ylim(0, 1.1)
-
-plt.suptitle('Shocktube results at t={0}\ndust fraction = {1}, gamma={2}'
-             .format(t_end, dustFrac, gamma))
-plt.show()
+    # Calculer la solution
+    positions, regions, values = sod_shock_analytic.solve(
+        left_state=left_state, 
+        right_state=right_state, 
+        geometry=(0., 1., 0.5),  # frontières gauche, droite et position du choc
+        t=t, 
+        gamma=gamma, 
+        npts=npts, 
+        dustFrac=dustFrac
+    )
+    
+    # Afficher les positions des différentes caractéristiques
+    print('Positions:')
+    for desc, vals in positions.items():
+        print('{0:10} : {1}'.format(desc, vals))
+    
+    # Afficher les valeurs dans les différentes régions
+    print('Regions:')
+    for region, vals in sorted(regions.items()):
+        print('{0:10} : {1}'.format(region, vals))
+    
+    # Tracer les résultats
+    f, axarr = plt.subplots(2, sharex=True)
+    
+    axarr[0].plot(values['x'], values['p'], linewidth=1.5, color='b')
+    axarr[0].plot(xp_array, p_array, linewidth=1.5, color='g')
+    axarr[0].set_ylabel('pressure')
+    axarr[0].set_ylim(0, 1.1)
+    
+    axarr[1].plot(values['x'], values['rho'], linewidth=1.5, color='r')
+    axarr[1].plot(x_array, rho_array, linewidth=1.5, color='g')
+    axarr[1].set_ylabel('density')
+    axarr[1].set_ylim(0, 1.1)
+    
+    plt.suptitle('Shocktube results at t={0}\ndust fraction = {1}, gamma={2}'
+                 .format(t_end, dustFrac, gamma))
+    plt.savefig(f"fig/Sod"+str(i)+".png", bbox_inches = 'tight')
+    plt.close()

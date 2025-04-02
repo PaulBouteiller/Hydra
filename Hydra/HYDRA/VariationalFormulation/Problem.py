@@ -108,7 +108,7 @@ class MeshManager:
         mesh : dolfinx.mesh.Mesh Maillage principal du problème.
         """
         self.mesh = mesh
-        self.comm = mesh.comm
+        # self.comm = mesh.comm
         self.tdim = mesh.topology.dim
         self.fdim = self.tdim - 1
         self.n = FacetNormal(mesh)
@@ -249,8 +249,8 @@ class MeshManager:
                 facet_integration_entities.append((tag, entities))
         
         # Degrés de quadrature
-        quad_deg_facet = (deg + 1) ** (self.tdim - 1)
-        # quad_deg_facet = (2 * deg + 1) ** (self.tdim)
+        # quad_deg_facet = (deg + 1) ** (self.tdim - 1)
+        quad_deg_facet = (2 * deg + 1) ** (self.tdim)
         quad_deg_volume = (deg + 1) ** self.tdim
         print(f"Nombre de points de Gauss: {quad_deg_volume}")
         
@@ -384,10 +384,7 @@ class Problem:
         """
         p_elem = self.EOS.set_eos(self.U, self.material)
         self.p_expr = Expression(p_elem, self.V_rho.element.interpolation_points())
-        self.p_func = Function(self.V_rho, name = "Pression")
-        
-        
-        
+        self.p_func = Function(self.V_rho, name = "Pression")      
         
     def fem_parameters(self):
         fem_parameters = default_fem_parameters()

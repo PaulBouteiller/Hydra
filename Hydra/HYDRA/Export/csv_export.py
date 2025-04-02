@@ -33,6 +33,7 @@ class OptimizedCSVExport:
         self.setup_energy_export()
         self.setup_pressure_export()
         self.setup_density_export()
+        self.setup_velocity_gradient_export()
             
     def setup_velocity_export(self):
         if "v" in self.dico_csv:
@@ -74,6 +75,26 @@ class OptimizedCSVExport:
             self.coordinate_data["rho"] = self.get_coordinate_data(self.pb.V_rho, self.rho_dte)
         else:
             self.csv_export_rho = False
+            
+    ##################################### Ajout Alice ##############################################
+   
+    def setup_velocity_gradient_export(self):
+        if "L" in self.dico_csv:
+            self.csv_export_L = True
+            self.L_dte = self.dofs_to_exp(self.pb.V_L, self.dico_csv.get("L"))
+            self.coordinate_data["L"] = self.get_coordinate_data(self.pb.V_L, self.L_dte)
+            if self.dim == 1:
+                self.L_name_list = ["L"]
+            elif self.dim == 2:
+                self.L_cte = [self.comp_to_export(self.L_dte, i) for i in range(4)]
+                self.L_name_list = ["du_{x}/d_{x}", "du_{x}/d_{y}", "du_{y}/d_{x}", "du_{y}/d_{y}"]
+            elif self.dim == 3:
+                self.L_cte = [self.comp_to_export(self.L_dte, i) for i in range(9)]
+                self.L_name_list = ["du_{x}/d_{x}", "du_{x}/d_{y}", "du_{x}/d_{z}", "du_{y}/d_{x}", "du_{y}/d_{y}", "du_{y}/d_{z}", "du_{z}/d_{x}", "du_{z}/d_{y}", "du_{z}/d_{z}"]
+        else:
+            self.csv_export_L = False
+            
+    #################################################################################################
 
     def initialize_csv_files(self):
         if COMM_WORLD.Get_rank() == 0:
@@ -118,6 +139,12 @@ class OptimizedCSVExport:
             self.export_field(t, "Pressure", self.pb.p_func, self.p_dte)
         if self.csv_export_rho:
             self.export_field(t, "rho", self.pb.rho, self.rho_dte)
+        ################################### Ajout Alice ##########################################     
+            
+        if self.csv_export_L:
+            self.export_field(t, "L", self.pb.u_list[2], self.L_cte, subfield_name = self.L_name_list)
+            
+        ##########################################################################################
             
     def export_field(self, t, field_name, field, dofs_to_export, subfield_name = None):
         if isinstance(subfield_name, list):
@@ -184,14 +211,6 @@ class OptimizedCSVExport:
             # Écrire les données en tant que chaîne unique
             self.csv_writers[field_name].writerow([','.join(formatted_data)])
             self.file_handlers[field_name].flush()
-
-    def export_free_surface(self, t):
-        if COMM_WORLD.Get_rank() == 0:
-            self.time.append(t)
-            self.free_surf_v.append(self.pb.v.x.array[self.free_surf_dof][0])
-            row = [t, self.free_surf_v[-1]]
-            self.csv_writers["FreeSurf_1D"].writerow(row)
-            self.file_handlers["FreeSurf_1D"].flush()
 
     def close_files(self):
         if COMM_WORLD.Get_rank() == 0:

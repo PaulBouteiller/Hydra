@@ -8,7 +8,8 @@ temporelle, couplées à des solveurs de Newton par blocs pour la résolution de
 non-linéaires à chaque pas de temps.
 """
 
-from .customNewton2 import create_newton_solver
+from .customNewton import create_newton_solver
+# from .SNESBlock2 import BlockedSNESSolver
 from ..utils.block import extract_rows, derivative_block
 from ..utils.default_parameters import default_Newton_parameters
 from ..Export.export_result import ExportResults
@@ -115,8 +116,7 @@ class Solve:
         
         Parameters
         ----------
-        **kwargs : dict
-            Arguments supplémentaires avec 'dt' et 'TFin'.
+        **kwargs : dict Arguments supplémentaires avec 'dt' et 'TFin'.
         """
         self.dt = kwargs.get("dt")
         self.Tfin = kwargs.get("TFin")
@@ -130,8 +130,7 @@ class Solve:
         
         Parameters
         ----------
-        **kwargs : dict
-            Arguments supplémentaires avec éventuellement 'dirk_method'.
+        **kwargs : dict Arguments supplémentaires avec éventuellement 'dirk_method'.
         """
         # Initialisation des paramètres DIRK
         self.dirk_method = kwargs.get("dirk_method", "BDF1")  # Par défaut: Backward Euler = BDF1

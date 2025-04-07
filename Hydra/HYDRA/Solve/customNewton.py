@@ -347,6 +347,9 @@ class BlockedNewtonSolver(BaseNewtonSolver):
     def _sync_solution_vector(self):
         """Synchronise le vecteur solution pour le format 'block'"""
         BlockMethods.sync_vector_to_x(self._x, self._u)
+        
+    # def solve(self):
+    #     super().solve(self._x)
 
 
 class NestedNewtonSolver(BaseNewtonSolver):
@@ -372,46 +375,25 @@ class NestedNewtonSolver(BaseNewtonSolver):
     
     def _setup_fieldsplit_preconditioner(self):
         """Configure le préconditionneur par champs pour le format 'nest'"""
-        # Vérifier si on demande un solveur direct pour toute la matrice
-        use_direct_solver = self.petsc_options.get("use_direct_solver", False)
+        # Configuration standard avec fieldsplit
+        self.krylov_solver.setType("gmres")
+        self.krylov_solver.getPC().setType("fieldsplit")
+        self.krylov_solver.getPC().setFieldSplitType(PC.CompositeType.ADDITIVE)
         
-        if use_direct_solver:
-            # Convertir la matrice nest en matrice monolithique pour solveur direct
-            self.krylov_solver.setType("preonly")
-            self.krylov_solver.getPC().setType("lu")
-            
-            # Spécifier le solveur LU à utiliser
-            solver_package = self.petsc_options.get("direct_solver_package", "mumps")
-            self.krylov_solver.getPC().setFactorSolverType(solver_package)
-            
-            # Convertir implicitement la matrice nest en matrice AIJ
-            opts = Options()
-            prefix = self.krylov_solver.getOptionsPrefix()
-            opts[f"{prefix}pc_factor_mat_solver_type"] = solver_package
-            
-            # Pour les matrices symétriques
-            if self.petsc_options.get("symmetric", False):
-                opts[f"{prefix}pc_factor_mat_ordering_type"] = "nd"
-        else:
-            # Configuration standard avec fieldsplit
-            self.krylov_solver.setType("gmres")
-            self.krylov_solver.getPC().setType("fieldsplit")
-            self.krylov_solver.getPC().setFieldSplitType(PC.CompositeType.ADDITIVE)
-            
-            # Récupérer les index sets pour chaque champ
-            nest_IS = self._J.getNestISs()
-            fields = []
-            for i in range(len(self._u)):
-                fields.append((f"field_{i}", nest_IS[0][i]))
-            
-            # Configurer le préconditionneur par champs
-            self.krylov_solver.getPC().setFieldSplitIS(*fields)
-            
-            # Configuration de chaque sous-solveur
-            field_split_ksp = self.krylov_solver.getPC().getFieldSplitSubKSP()
-            for i, ksp_sub in enumerate(field_split_ksp):
-                ksp_sub.setType("preonly")
-                ksp_sub.getPC().setType("lu")
+        # Récupérer les index sets pour chaque champ
+        nest_IS = self._J.getNestISs()
+        fields = []
+        for i in range(len(self._u)):
+            fields.append((f"field_{i}", nest_IS[0][i]))
+        
+        # Configurer le préconditionneur par champs
+        self.krylov_solver.getPC().setFieldSplitIS(*fields)
+        
+        # Configuration de chaque sous-solveur
+        field_split_ksp = self.krylov_solver.getPC().getFieldSplitSubKSP()
+        for i, ksp_sub in enumerate(field_split_ksp):
+            ksp_sub.setType("preonly")
+            ksp_sub.getPC().setType("lu")
     
     def _setup_debug_solver(self):
         """Configure le solveur de débogage pour le format 'nest'"""

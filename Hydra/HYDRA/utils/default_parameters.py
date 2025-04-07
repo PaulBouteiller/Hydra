@@ -47,6 +47,7 @@ def default_Newton_parameters():
             "mat_mumps_icntl_35": 1,
             "mat_mumps_cntl_7": 1e-8  # Tolérance BLR
         })
+    solver_u.update({"debug": True})
     return solver_u
 
 def default_shock_capturing_parameters():

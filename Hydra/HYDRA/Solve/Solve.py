@@ -111,9 +111,8 @@ class Solve:
         self.solver = BlockedNewtonSolver(
             Fr_form, 
             self.pb.u_list, 
-            J_form, 
-            bcs=self.pb.bc_class.bcs, 
-            petsc_options = petsc_options, 
+            J_form, petsc_options,
+            bcs=self.pb.bc_class.bcs,
             entity_maps=self.pb.entity_maps
         )
         

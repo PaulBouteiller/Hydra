@@ -1,7 +1,7 @@
 from time import time
 from petsc4py import PETSc
 from dolfinx.log import LogLevel, set_log_level
-from .customblockedNewton import BlockedNewtonSolver
+# from .customblockedNewton import BlockedNewtonSolver
 
 class HybridBlockedNewtonSolver(BlockedNewtonSolver):
     """

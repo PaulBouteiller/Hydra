@@ -38,8 +38,8 @@ def default_Newton_parameters():
     solver_u.update({"ksp_type": "preonly"})
     solver_u.update({"pc_type": "lu"})
     solver_u.update({"pc_factor_mat_solver_type" : "mumps"})
-    solver_u.update({"relative_tolerance" : 1e-6})
-    solver_u.update({"absolute_tolerance" : 1e-6})
+    solver_u.update({"relative_tolerance" : 1e-8})
+    solver_u.update({"absolute_tolerance" : 1e-8})
     solver_u.update({"convergence_criterion" : "incremental"})
     solver_u.update({"maximum_iterations" : 50})
     solver_u.update({"pc_factor_mat_solver_type": "mumps",
@@ -47,8 +47,10 @@ def default_Newton_parameters():
             "mat_mumps_icntl_35": 1,
             "mat_mumps_cntl_7": 1e-8  # Tolérance BLR
         })
-    solver_u.update({"debug": True})
-    return solver_u
+    structure_type = "block"
+    debug = True
+    
+    return solver_u, structure_type, debug
 
 def default_shock_capturing_parameters():
     shock_sensor = {}

@@ -8,9 +8,7 @@ temporelle, couplées à des solveurs de Newton par blocs pour la résolution de
 non-linéaires à chaque pas de temps.
 """
 
-from .customblockedNewton import BlockedNewtonSolver
-from .hybrid_blocked_newton import HybridBlockedNewtonSolver
-from .customnestedNewton import NestedNewtonSolver, create_newton_solver
+from .customNewton2 import create_newton_solver
 from ..utils.block import extract_rows, derivative_block
 from ..utils.default_parameters import default_Newton_parameters
 from ..Export.export_result import ExportResults
@@ -107,33 +105,9 @@ class Solve:
         J_form = form(J, entity_maps=self.pb.entity_maps)
         
         # Configuration des options PETSc
-        petsc_options = default_Newton_parameters()
-        # Création du solveur
-        # self.solver = BlockedNewtonSolver(
-        #     Fr_form, 
-        #     self.pb.u_list, 
-        #     J_form, petsc_options,
-        #     bcs=self.pb.bc_class.bcs,
-        #     entity_maps=self.pb.entity_maps
-        # )
-        
-        # self.solver = NestedNewtonSolver(
-        #     Fr_form, 
-        #     self.pb.u_list, 
-        #     J_form, petsc_options,
-        #     bcs=self.pb.bc_class.bcs
-        # )
-        
-        self.solver = create_newton_solver('block', Fr_form, self.pb.u_list, J_form, petsc_options, self.pb.bc_class.bcs)
-        
-        # self.solver = HybridBlockedNewtonSolver(
-        #     Fr_form, 
-        #     self.pb.u_list, 
-        #     J_form, 
-        #     bcs=self.pb.bc_class.bcs, 
-        #     petsc_options=petsc_options, 
-        #     entity_maps=self.pb.entity_maps
-        # )
+        petsc_options, structure_type, debug = default_Newton_parameters()
+        self.solver = create_newton_solver(structure_type, Fr_form, self.pb.u_list, 
+                                           J_form, petsc_options, debug, self.pb.bc_class.bcs)
 
     def setup_time_parameters(self, **kwargs):
         """

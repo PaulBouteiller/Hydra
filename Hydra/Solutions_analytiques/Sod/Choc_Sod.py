@@ -30,7 +30,7 @@ Gaz = Material(rho0, 1, "GP", None, dico_eos, dico_devia)
 #Degré d'interpolation #~Volumes finis si degré 0.
 degree = 1
     
-Nx = int(500 / (degree + 1))
+Nx = int(2000 / (degree + 1))
 
 Longueur = 1
 Largeur = 0.1 / Nx

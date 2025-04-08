@@ -4,6 +4,55 @@ Created on Fri Mar  7 11:10:20 2025
 @author: bouteillerp
 """
 
+"""
+Shock sensors for discontinuity detection and stabilization in compressible flow simulations
+==========================================================================================
+
+This module implements various shock sensing techniques for detecting discontinuities
+in compressible flow simulations. These sensors are used to apply localized artificial
+viscosity or other stabilization methods near shocks while preserving accuracy in smooth
+regions of the flow.
+
+The implementation includes:
+- Ducros sensor: Based on the ratio of divergence to vorticity
+- Fernandez sensor: Extended version of Ducros with mesh size scaling
+
+The shock sensors provide a smooth or binary indicator function that identifies
+regions where numerical stabilization should be applied, helping to capture shocks
+sharply while minimizing numerical dissipation in the rest of the domain.
+
+Classes:
+--------
+ShockSensor : Abstract base class for shock sensors
+    Provides common functionality and interface
+    Handles initialization and basic utility methods
+
+DucrosShockSensor : Ducros shock detection algorithm
+    Identifies compression shocks using velocity field divergence
+    Distinguishes between shocks and turbulent features using vorticity
+    Provides a binary indicator function based on threshold
+
+FernandezShockSensor : Fernandez shock detection algorithm
+    Extends Ducros sensor with additional scaling
+    Incorporates mesh size and polynomial degree information
+    Provides improved detection in high-order discretizations
+
+Methods:
+--------
+set_sensor_function : Compute the shock sensor indicator function
+    Analyzes the flow field to detect discontinuities
+    Implements the specific sensor algorithm
+    Returns a field ranging from 0 (no shock) to 1 (strong shock)
+
+References:
+-----------
+Ducros, F., et al. (1999). "Large-Eddy Simulation of the Shock/Turbulence Interaction."
+Journal of Computational Physics, 152(2), 517-549.
+
+Fernandez, P., et al. (2018). "High-Order Shock Capturing for Discontinuous Galerkin Methods."
+AIAA Journal, 56(3), 965-978.
+"""
+
 from ufl import div, curl, sqrt, conditional, ge, inner
 # from dolfinx.fem import Function, functionspace
 

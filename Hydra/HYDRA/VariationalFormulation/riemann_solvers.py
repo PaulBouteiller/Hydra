@@ -9,11 +9,12 @@ from ..utils.default_parameters import default_Riemann_solver_parameters
 
 class RiemannSolvers:
     """
-    Implémentation de différents solveurs de Riemann pour les équations d'Euler.
+    Collection of Riemann solvers for numerical flux computation.
     
-    Cette classe fournit des approximations numériques pour résoudre le problème
-    de Riemann aux interfaces entre éléments. Elle inclut plusieurs types de solveurs
-    avec différents niveaux de précision et de coût computationnel.
+    This class implements various approximate Riemann solvers used to
+    compute numerical fluxes at element interfaces in discontinuous Galerkin
+    methods. The solvers range from simple and robust (Rusanov) to more
+    accurate but complex (HLLC, HLLCLM) approaches.
     
     Les solveurs implémentés sont:
     - Rusanov (Local Lax-Friedrichs): Simple et robuste mais diffusif
@@ -32,16 +33,16 @@ class RiemannSolvers:
 
     def __init__(self, EOS, material):
         """
-        Initialise le solveur de Riemann.
+        Initialize the Riemann solver collection.
         
         Parameters
         ----------
-        EOS : EOS Gestionnaire de l'EOS
-        material : Material 
+        EOS : EOS Equation of state manager
+        material : Material Material properties
         """
         self.EOS = EOS
         self.material = material
-        self.eps = 1e-8  # Valeur epsilon pour éviter les divisions par zéro        
+        self.eps = 1e-8  # Pour éviter les divisions par zéro        
         
     def signal_speed_davis(self, u_L, u_R, c_L, c_R, n):
         """
@@ -265,24 +266,24 @@ class RiemannSolvers:
         HLL_flux = self.hll_flux(U, Ubar, U_flux, Ubar_flux, n)
         # Détermination du flux HLLC en fonction de la position de l'onde
         fluxes = []
-        # for k in range(len(U)):
-        #     flux = conditional(ge(S_L, 0),
-        #                       F_L[k],
-        #                       conditional(ge(S_M, 0),
-        #                                  F_star_L[k],
-        #                                  conditional(ge(S_R, 0),
-        #                                             F_star_R[k],
-        #                                             F_R[k])))
-        #     fluxes.append(flux)
-            
         for k in range(len(U)):
             flux = conditional(ge(S_L, 0),
                               F_L[k],
                               conditional(ge(S_M, 0),
-                                          HLL_flux[k],
+                                          F_star_L[k],
                                           conditional(ge(S_R, 0),
                                                     F_star_R[k],
                                                     F_R[k])))
+            fluxes.append(flux)
+            
+        # for k in range(len(U)):
+        #     flux = conditional(ge(S_L, 0),
+        #                       F_L[k],
+        #                       conditional(ge(S_M, 0),
+        #                                   HLL_flux[k],
+        #                                   conditional(ge(S_R, 0),
+        #                                             F_star_R[k],
+        #                                             F_R[k])))
             fluxes.append(flux)
         
         return fluxes

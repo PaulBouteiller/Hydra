@@ -3,6 +3,40 @@ Created on Fri Mar 11 09:28:55 2022
 
 @author: bouteillerp
 """
+
+"""
+Simulation result export management
+==================================
+
+This module provides a framework for exporting simulation results from HYDRA.
+It serves as the main interface for all export operations, supporting multiple output formats
+including VTK and CSV.
+
+The ExportResults class coordinates all export operations, delegating specific formats to
+specialized exporters such as OptimizedCSVExport. It manages file creation, directory structure,
+and proper cleanup of temporary files.
+
+The module supports:
+- VTK file export for 3D visualization in tools like ParaView
+- CSV export for post-processing and data analysis
+
+Classes:
+--------
+ExportResults : Main export manager
+    Coordinates all export operations
+    Manages file handles and directory structure
+    Delegates specific formats to specialized exporters
+    Provides a unified interface for the simulation loop
+
+Methods:
+--------
+export_results(t) : Export results at a specific time
+    Manages the export of all requested fields to the appropriate formats at time t
+
+save_dir(name) : Get the save directory path
+    Returns the standardized path for saving results
+"""
+
 from dolfinx.io import VTKFile
 from os import remove, path
 from mpi4py.MPI import COMM_WORLD
@@ -11,16 +45,17 @@ from .csv_export import OptimizedCSVExport
 class ExportResults:
     def __init__(self, problem, name, dictionnaire, dictionnaire_csv):
         """
-        Initialise l'export des résultats.
-
+        Initialize the results export manager.
+        
+        Creates a manager for exporting simulation results to various formats,
+        including VTK for visualization and CSV for data analysis.
+        
         Parameters
         ----------
-        problem : Objet de la classe Problem, problème mécanique qui a été résolu.
-        name : String, nom du dossier dans lequel sera stocké les résultats.
-        dictionnaire : Dictionnaire, dictionnaire contenant le nom des variables
-                        que l'on souhaite exporter au format XDMF (Paraview).
-        dictionnaire_csv : Dictionnaire, dictionnaire contenant le nom des variables
-                            que l'on souhaite exporter au format csv.
+        problem : Problem Problem object containing the simulation data
+        name : str Base name for the simulation results and output directory
+        dictionnaire : dict Dictionary specifying which fields to export to VTK format
+        dictionnaire_csv : dict Dictionary specifying which fields to export to CSV format
         """
         self.pb = problem
         self.name = name
@@ -36,21 +71,31 @@ class ExportResults:
 
     def save_dir(self, name):
         """
-        Renvoie nom du dossier dans lequel sera stocké les résultats.
+        Generate the directory path for saving results.
+        
+        Creates a standardized directory path based on the simulation name.
+        
         Parameters
         ----------
-        name : String, nom du dossier dans lequel sera stocké les résultats.
+        name : str Base name for the simulation
+            
+        Returns
+        -------
+        str Directory path for saving results
         """
         savedir = name + "-" + "results" + "/"
         return savedir
 
     def export_results(self, t):
         """
-        Exporte les résultats au format XDMF.
-
+        Export results to VTK format at the specified time.
+        
+        Writes the current values of all enabled fields to VTK format
+        for visualization in tools like ParaView.
+        
         Parameters
         ----------
-        t : Float, temps de la simulation auquel les résultats sont exportés.
+        t : float Current simulation time
         """
         if  self.dico == {}:
             return       

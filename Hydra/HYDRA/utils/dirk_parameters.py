@@ -1,5 +1,7 @@
 import numpy as np
 from numpy import sqrt, array
+
+
 """ Pour plus de référence, voir la page de Sundials par le LNAL
 https://sundials.readthedocs.io/en/latest/arkode/Butcher_link.html#implicit-butcher-tables
 

@@ -1,3 +1,48 @@
+"""
+Generic utility functions for numerical simulations
+=================================================
+
+This module provides a collection of general-purpose utility functions for
+numerical simulations in the HYDRA framework. These functions handle common
+tasks such as eigenvalue calculations, sequence operations, variable extraction,
+and parallel data gathering.
+
+The utilities are organized into several categories:
+- Mathematical operations (max/min of sequences, eigenvalues)
+- UFL expression manipulation and transformation
+- Parallel computing utilities for MPI operations
+- Mesh and visualization helpers
+
+Functions:
+----------
+euler_eigenvalues_2D(v, n, c) : Calculate eigenvalues of Euler flux Jacobian
+    Returns the characteristic speeds for the 2D Euler equations
+
+max_abs_of_sequence(a) : Maximum absolute value in a sequence
+    Computes max(|a₁|, |a₂|, ..., |aₙ|) for UFL expressions
+
+max_of_sequence(a) : Maximum value in a sequence
+    Computes max(a₁, a₂, ..., aₙ) for UFL expressions
+
+map_ufl_operator_to_sequence(a, op) : Apply UFL operator to sequence
+    Maps binary UFL operators across sequences of expressions
+
+extract_primitive_variables(U) : Extract primitive variables from conservative form
+    Converts [ρ, ρu, ρE] to [ρ, u, E] for fluid dynamics calculations
+
+gather_function(u) : Gather function values in parallel
+    Collects distributed function data onto the root process
+
+gather_vector(local_vector, local_range, size) : Gather vector data in parallel
+    General-purpose utility for collecting distributed vectors
+
+gather_coordinate(V) : Gather mesh coordinates in parallel
+    Collects distributed mesh coordinate data onto the root process
+
+plot_mesh(mesh, tags) : Visualize mesh with markers
+    Creates a PyVista-based visualization of the mesh with boundary markers
+"""
+
 from ufl import max_value as Max
 from ufl.core.expr import Expr
 from ufl import dot
@@ -6,19 +51,30 @@ from numpy import asarray, int32, zeros
 
 def euler_eigenvalues_2D(v, n, c):
     """
-    v = velocity
-    n = n = FacetNormal(msh)
-    Retourne la liste [lambda1, lambda2,, lambda4] pour le Jacobien dans la direction n.
+    Calculate eigenvalues of the Euler flux Jacobian.
+    
+    Computes the characteristic speeds (eigenvalues) of the Euler equations
+    in the direction of the normal vector n.
+    
+    Parameters
+    ----------
+    v : UFL expression Velocity vector
+    n : UFL expression Normal vector
+    c : UFL expression Sound speed
+        
+    Returns
+    -------
+    list List of eigenvalues [λ₁, λ₂] for the Jacobian in direction n
     """
     # vitesse normale (v·n)
     v_n = dot(v, n)
     return [v_n - c, v_n + c]
 
 def max_abs_of_sequence(a):
-    r"""Utility function to generate the maximum of the absolute values of
-    elements in a sequence
-
-    .. math:: \max(|a_1|, |a_2|, |a_3|, \ldots, |a_N|)
+    """
+    Calculate the maximum absolute value in a sequence.
+    
+    Computes max(|a₁|, |a₂|, |a₃|, ..., |aₙ|) for a sequence of UFL expressions.
     Notes
     -----
     This is required because (currently) ufl only allows two values in
@@ -39,9 +95,10 @@ def max_abs_of_sequence(a):
     return max_of_sequence(a)
 
 def max_of_sequence(a):
-    r"""Utility function to generate the maximum of the absolute values of
-    elements in a sequence
-    .. math:: \max(a_1, a_2, a_3, \ldots, a_N)
+    """
+    Calculate the maximum value in a sequence.
+    
+    Computes max(a₁, a₂, a₃, ..., aₙ) for a sequence of UFL expressions.
     Notes
     -----
     This is required because (currently) ufl only allows two values in
@@ -73,26 +130,30 @@ def map_ufl_operator_to_sequence(a, op):
     return alpha
 
 def extract_primitive_variables(U):
-    """Extrait les variables primitives à partir des variables conservatives.
-
-    Cette fonction décompose le vecteur des variables conservatives U = [ρ, ρu, ρE]
-    en variables primitives [ρ, u, E] où ρ est la densité, u est la vitesse,
-    et E est l'énergie spécifique totale.
+    """
+    Extract primitive variables from conservative variables.
+    
+    Decomposes the vector of conservative variables U = [ρ, ρu, ρE]
+    into primitive variables [ρ, u, E].
     
     Parameters
     ----------
-    U : list[ufl.core.expr.Expr] Liste des variables conservatives [ρ, ρu, ρE].
+    U : list of UFL expressions
+        Conservative variables [ρ, ρu, ρE]
+        
     Returns
     -------
-    tuple Triplet (ρ, u, E) des variables primitives, où:
-        - ρ : Densité
-        - u : Vitesse (vecteur)
-        - E : Énergie spécifique totale  
+    tuple
+        (ρ, u, E) - Primitive variables:
+        - ρ: Density
+        - u: Velocity (vector)
+        - E: Total specific energy
+        
     Notes
     -----
-    Cette transformation est nécessaire pour calculer la pression et d'autres
-    quantités thermodynamiques qui sont naturellement exprimées en termes des
-    variables primitives.
+    This transformation is necessary for computing pressure and other
+    thermodynamic quantities that are naturally expressed in terms of
+    primitive variables.
     """
     rho = U[0]
     u = U[1] / rho
@@ -101,14 +162,17 @@ def extract_primitive_variables(U):
     
 def gather_function(u):
     """
-    Rassemble les inconnus dans un unique vecteur sur le processus 0
+    Gather function values from all processes to the root process.
+    
+    Collects distributed function values into a single array on process 0.
+    
     Parameters
     ----------
-    u : Function.
+    u : Function FEniCSx function to gather
+        
     Returns
     -------
-    global_array : np.array contenant la concaténation des inconnues portées
-                    par les différents processus
+    ndarray Array containing all function values (on root process only)
     """
     dofmap = u.function_space.dofmap
     imap = dofmap.index_map
@@ -118,14 +182,19 @@ def gather_function(u):
     
 def gather_vector(local_vector, local_range, size):
     """
-    Rassemble les inconnus dans un unique vecteur sur le processus 0
+    Gather vector values from all processes to the root process.
+    
+    General-purpose utility for collecting distributed vectors.
+    
     Parameters
     ----------
-    u : Function.
+    local_vector : ndarray Local portion of the vector on this process
+    local_range : ndarray Local range indices [start, end]
+    size : int Global size of the vector
+        
     Returns
     -------
-    global_array : np.array contenant la concaténation des inconnues portées
-                    par les différents processus
+    ndarray Array containing the complete vector (on root process only)
     """
     comm = MPI.COMM_WORLD
     ranges = comm.gather(local_range, root=0)
@@ -176,6 +245,17 @@ def gather_coordinate(V):
         return global_array
     
 def plot_mesh(mesh, tags):
+    """
+    Visualize a mesh with boundary markers.
+    
+    Creates a PyVista-based visualization of the mesh, highlighting
+    boundary markers with different colors.
+    
+    Parameters
+    ----------
+    mesh : Mesh FEniCSx mesh to visualize
+    tags : MeshTags Tags for mesh entities (e.g., boundaries)
+    """
     from pyvista import Plotter, UnstructuredGrid
     from dolfinx.plot import vtk_mesh
     from numpy import full_like, bool_

@@ -3,6 +3,44 @@ Created on Wed Jan  8 18:07:35 2025
 
 @author: bouteillerp
 """
+"""
+Block manipulation utilities for UFL forms and matrices
+======================================================
+
+This module provides utilities for manipulating UFL forms and matrices in a
+block-structured manner. It includes functions for extracting and organizing
+rows and derivatives of UFL forms, which is particularly useful for implementing
+block-structured solvers for coupled PDEs.
+
+The key functionalities include:
+- Extraction of individual equation rows from a coupled system
+- Computation of Jacobian matrices in block form
+- Manipulation of UFL expressions with multifunction pattern
+
+These utilities are essential for implementing solvers that exploit the block
+structure of the discretized PDEs, such as block preconditioners and specialized
+Newton methods for coupled systems.
+
+Classes:
+--------
+SeparateSpaceFormSplitter : UFL multifunction for form splitting
+    Implements pattern matching for UFL expressions
+    Separates forms based on test function spaces
+
+Functions:
+----------
+extract_rows(F, v) : Extract individual rows from a coupled system
+    Splits the residual form F into separate forms for each test function in v
+    Returns a list of forms corresponding to each equation
+
+derivative_block(F, u, du) : Compute Jacobian blocks for a coupled system
+    Calculates the Gateaux derivative of each row with respect to each solution component
+    Returns a 2D list of forms representing the Jacobian blocks
+------
+These utilities operate on UFL forms before compilation, allowing for symbolic
+manipulation of the forms. This enables specialized handling of block structures
+in the resulting linear systems.
+"""
 from ufl.corealg.multifunction import MultiFunction
 from ufl.algorithms.map_integrands import map_integrand_dags
 from ufl.constantvalue import Zero
@@ -15,12 +53,48 @@ from ufl import derivative
 
 
 class SeparateSpaceFormSplitter(MultiFunction):
-
-    def split(self, form, v, u=None):
+    """
+    UFL multifunction for splitting forms based on test function spaces.
+    
+    This class implements the pattern matching mechanism needed to
+    separate a mixed variational form into individual forms for
+    each test function space.
+    """
+    def split(self, form, v, u = None):
+        """
+        Split a UFL form based on a test function.
+        
+        Extracts the part of the form containing the specified test function,
+        replacing other test functions with zeros.
+        
+        Parameters
+        ----------
+        form : UFL form Form to split
+        v : TestFunction Test function to keep in the split form
+        u : TrialFunction, optional Trial function (unused in current implementation)
+            
+        Returns
+        -------
+        UFL form The part of the form containing only the specified test function
+        """
         self.vu = tuple((v, u))
         return map_integrand_dags(self, form)
 
     def argument(self, obj):
+        """
+        Handle UFL arguments (test/trial functions) during form splitting.
+        
+        Replaces arguments that don't match the target test function
+        with zero expressions.
+        
+        Parameters
+        ----------
+        obj : UFL argument Test or trial function to check
+            
+        Returns
+        -------
+        UFL expression The original argument if it matches the target, zero otherwise
+        """
         if obj not in self.vu:
             return Zero(shape=obj.ufl_shape)
         return obj
@@ -68,6 +142,11 @@ def extract_rows(F, v):
 
 def derivative_block(F, u, du):
     """
+    Compute block-wise derivatives of a variational form.
+    
+    Calculates the Gateaux derivative of each row of the residual
+    with respect to each solution component, creating a block
+    Jacobian structure.
     Parameters
     ----------
     F : Block residual formulation

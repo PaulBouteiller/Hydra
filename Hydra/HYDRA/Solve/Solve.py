@@ -1,11 +1,42 @@
 """
-Intégration temporelle et résolution non-linéaire pour la simulation de fluides compressibles.
+Time integration and nonlinear solving for compressible fluid simulations
+========================================================================
 
-Ce module contient les classes responsables de l'intégration temporelle et de la résolution
-des systèmes non-linéaires pour les simulations d'écoulements compressibles. Il implémente
-principalement des méthodes DIRK (Diagonally Implicit Runge-Kutta) pour l'intégration
-temporelle, couplées à des solveurs de Newton par blocs pour la résolution des systèmes
-non-linéaires à chaque pas de temps.
+This module provides the main solving infrastructure for time-dependent compressible
+fluid dynamics simulations. It implements high-order DIRK (Diagonally Implicit Runge-Kutta)
+time integration schemes coupled with Newton-type nonlinear solvers.
+
+The implementation offers:
+- Multiple DIRK schemes of orders 1-5 with various stability properties
+- Efficient handling of nonlinear systems at each time step or stage
+- Flexible configuration of time stepping and solver parameters
+Classes:
+--------
+Solve : Main solver class for time-dependent problems
+    Manages the time integration process
+    Coordinates nonlinear solvers for each time step/stage
+    Handles result export and progress tracking
+    Implements various DIRK schemes for time integration
+
+Methods:
+--------
+initialize_solve : Initialize the solver with problem settings
+    Sets up export, solver, and time integration parameters
+
+run_simulation : Execute the complete time-dependent simulation
+    Implements the main time stepping loop
+    Manages DIRK stages and solution updates
+    Coordinates result export and progress tracking
+
+solve_stage : Solve a single DIRK stage
+    Configures and solves the nonlinear system for a specific stage
+    Updates stage solutions for multi-stage schemes
+
+Notes:
+------
+The module supports various DIRK schemes with different orders and stability properties.
+Advanced DIRK schemes (e.g., SDIRK4_BN_Stable_1_0) provide control over numerical
+dissipation and are suitable for capturing complex physical phenomena.
 """
 
 from .customNewton import create_newton_solver
@@ -20,32 +51,32 @@ from dolfinx.fem import form, Function
 
 class Solve:
     """
-    Résout le problème de mécanique des fluides compressibles avec intégration temporelle.
+    Main time integration and solution manager for fluid dynamics simulations.
     
-    Cette classe gère le processus complet de résolution incluant:
-    - Initialisation du problème et des structures de données
-    - Intégration temporelle avec des schémas DIRK
-    - Résolution des systèmes non-linéaires à chaque pas de temps
-    - Export des résultats
+    This class handles the complete time-dependent simulation process, including:
+    - Initialization of the problem and solution vectors
+    - Time integration using DIRK (Diagonally Implicit Runge-Kutta) schemes
+    - Nonlinear solution at each time step/stage
+    - Result export and progress tracking
     
-    La classe supporte différentes méthodes DIRK (de BDF1 jusqu'à des schémas d'ordre 5)
-    et peut être configurée avec différentes options pour le solveur et l'export.
+    It supports various DIRK schemes with different orders of accuracy and
+    stability properties, from simple backward Euler to sophisticated
+    algebraically stable high-order methods.
     """
 
     def __init__(self, problem, **kwargs):
         """
-        Initialise le solveur pour l'intégration temporelle.
+        Initialize the solver for time-dependent simulation.
         
         Parameters
         ----------
-        problem : Problem Le problème à résoudre.
-        **kwargs : dict
-            Arguments supplémentaires pour la configuration:
-            - dt : float Pas de temps.
-            - TFin : float Temps final de la simulation.
-            - dirk_method : str, optional Méthode DIRK à utiliser (par défaut: "BDF1").
-            - Prefix : str, optional Préfixe pour les fichiers de résultats.
-            - compteur : int, optional Fréquence d'export des résultats (1 = à chaque pas de temps).
+        problem : Problem The fluid dynamics problem to solve
+        **kwargs : dict Additional configuration parameters:
+            - dt : float Time step size
+            - TFin : float Final simulation time
+            - dirk_method : str, optional DIRK scheme to use (default: "BDF1")
+            - Prefix : str, optional Prefix for result files
+            - compteur : int, optional Export frequency (1 = every time step)
         """
         self.pb = problem
         self.initialize_solve(problem, **kwargs)
@@ -54,12 +85,12 @@ class Solve:
 
     def initialize_solve(self, problem, **kwargs):
         """
-        Initialise le solveur avec les paramètres de base.
-        
+        Initialize the solver components and parameters.
+
         Parameters
         ----------
-        problem : Problem Le problème à résoudre.
-        **kwargs : dict Arguments supplémentaires pour la configuration.
+        problem : Problem The fluid dynamics problem to solve
+        **kwargs : dict Additional configuration parameters
         """
         # Initialisation du problème
         self.pb.set_initial_conditions()
@@ -79,11 +110,14 @@ class Solve:
         
     def setup_export(self, **kwargs):
         """
-        Configure l'export des résultats.
+        Configure the result export system.
+        
+        Sets up the export manager for VTK and CSV outputs based on the
+        problem's export settings.
         
         Parameters
         ----------
-        **kwargs : dict Arguments supplémentaires avec éventuellement 'Prefix'.
+        **kwargs : dict Additional parameters, potentially including 'Prefix'
         """
         self.export = ExportResults(
             self.pb, 
@@ -95,7 +129,10 @@ class Solve:
         
     def setup_solver(self):
         """
-        Configure le solveur non-linéaire.
+        Configure the nonlinear solver.
+        
+        Sets up the Newton-type solver for the nonlinear systems arising
+        at each time step or stage, including residual and Jacobian forms.
         """
         # Extraction du résidu et du jacobien
         Fr = extract_rows(self.pb.residual, self.pb.u_test_list)
@@ -112,11 +149,14 @@ class Solve:
 
     def setup_time_parameters(self, **kwargs):
         """
-        Configure les paramètres temporels de la simulation.
+        Configure time stepping parameters.
+        
+        Sets up the time step, final time, and number of time steps for
+        the simulation, and prepares time-dependent boundary conditions.
         
         Parameters
         ----------
-        **kwargs : dict Arguments supplémentaires avec 'dt' et 'TFin'.
+        **kwargs : dict Must include 'dt' and 'TFin'
         """
         self.dt = kwargs.get("dt")
         self.Tfin = kwargs.get("TFin")
@@ -126,13 +166,15 @@ class Solve:
         
     def setup_dirk_scheme(self, **kwargs):
         """
-        Configure le schéma DIRK pour l'intégration temporelle.
+        Configure the DIRK time integration scheme.
+        
+        Sets up the DIRK scheme parameters based on the specified method,
+        initializing the necessary data structures for multi-stage integration.
         
         Parameters
         ----------
-        **kwargs : dict Arguments supplémentaires avec éventuellement 'dirk_method'.
+        **kwargs : dict May include 'dirk_method' to specify the DIRK scheme
         """
-        # Initialisation des paramètres DIRK
         self.dirk_method = kwargs.get("dirk_method", "BDF1")  # Par défaut: Backward Euler = BDF1
         self.dirk_params = DIRKParameters(self.dirk_method)
         print(f"Initializing with temporal scheme: {self.dirk_params}")
@@ -140,10 +182,11 @@ class Solve:
         
     def initialize_stages(self):
         """
-        Initialise les structures pour stocker les étapes intermédiaires du schéma DIRK.
+        Initialize data structures for DIRK stages.
         
-        Crée des tableaux pour les solutions intermédiaires et les termes sources
-        à chaque étape du schéma DIRK.
+        Creates arrays for storing intermediate solutions and right-hand sides
+        for each stage of the DIRK scheme, based on the number of stages and
+        function spaces.
         """
         self.num_stages = self.dirk_params.num_stages
         
@@ -178,11 +221,14 @@ class Solve:
         
     def export_results(self, t):
         """
-        Exporte les résultats au temps spécifié.
+        Export simulation results at the specified time.
+        
+        Calls the appropriate export functions for VTK and CSV formats
+        based on the problem's export configuration.
         
         Parameters
         ----------
-        t : float Temps auquel exporter les résultats.
+        t : float Current simulation time
         """
         self.pb.query_output(t)
         self.export.export_results(t)
@@ -190,18 +236,14 @@ class Solve:
 
     def run_simulation(self, **kwargs):
         """
-        Exécute la simulation complète.
+        Run the complete time-dependent simulation.
         
-        Réalise la boucle temporelle principale en effectuant les étapes suivantes
-        à chaque pas de temps:
-        1. Mise à jour du temps
-        2. Résolution des étapes DIRK
-        3. Calcul de la solution finale
-        4. Export des résultats
+        Executes the main time stepping loop, solving the DIRK stages
+        at each time step and exporting results at the specified frequency.
         
         Parameters
         ----------
-        **kwargs : dict Arguments supplémentaires avec éventuellement 'compteur'.
+        **kwargs : dict May include 'compteur' to specify export frequency
         """
         compteur_output = kwargs.get("compteur", 1)
         num_time_steps = self.num_time_steps
@@ -241,12 +283,13 @@ class Solve:
             
     def handle_output(self, compteur_output):
         """
-        Gère l'export périodique des résultats.
+        Handle periodic result export.
+        
+        Exports results based on the specified frequency counter.
         
         Parameters
         ----------
-        compteur_output : int
-            Fréquence d'export (nombre de pas de temps entre chaque export).
+        compteur_output : int Export frequency (number of time steps between exports)
         """
         if self.is_compteur:
             if self.compteur == compteur_output:
@@ -258,11 +301,11 @@ class Solve:
             
     def update_time(self, j):
         """
-        Met à jour le temps courant et calcule les temps intermédiaires.
+        Update the current time and calculate intermediate stage times.
         
         Parameters
         ----------
-        j : int Indice du pas de temps courant.
+        j : int Current time step index
         """
         self.t = self.load_steps[j]
         
@@ -271,14 +314,14 @@ class Solve:
     
     def configure_stage_residual(self, stage):
         """
-        Configure le résidu pour une étape spécifique du schéma DIRK.
+        Configure the residual for a specific DIRK stage.
         
-        Définit le facteur dt et les termes sources appropriés pour l'étape courante,
-        puis met à jour les conditions aux limites pour le temps intermédiaire.
+        Sets up the dt factor and source terms for the current stage,
+        and updates boundary conditions for the stage time.
         
         Parameters
         ----------
-        stage : int Numéro de l'étape.
+        stage : int Stage index
         """
         # Configuration du facteur dt
         a_ii = self.dirk_params.A[stage, stage]
@@ -300,18 +343,18 @@ class Solve:
             
     def calculate_stage_source_term(self, stage):
         """
-        Calcule les termes sources pour une étape spécifique du schéma DIRK.
+        Calculate the source terms for a specific DIRK stage.
         
-        Implémente la formule mathématique pour calculer les termes sources s_h^{n,i}
-        selon la théorie des schémas DIRK.
+        Implements the formula for computing the source terms s_h^{n,i}
+        according to the DIRK scheme theory.
         
         Parameters
         ----------
-        stage : int Numéro de l'étape.
+        stage : int Stage index
             
         Returns
         -------
-        list Liste des termes sources pour chaque variable.
+        list Source terms for each variable
         """
         # Pour la première étape, utiliser directement la solution précédente
         if stage == 0:
@@ -343,16 +386,15 @@ class Solve:
             
     def solve_stage(self, stage):
         """
-        Résout une étape spécifique du schéma DIRK.
+        Solve a specific DIRK stage.
         
-        Configure le système pour l'étape courante, résout le système non-linéaire,
-        puis stocke la solution.
+        Configures the system for the current stage, solves the nonlinear
+        system, and stores the solution.
         
         Parameters
         ----------
-        stage : int Numéro de l'étape à résoudre.
+        stage : int Stage index to solve
         """
-        # Configuration du système
         self.configure_stage_residual(stage)
         
         # Résolution du système non-linéaire
@@ -364,10 +406,10 @@ class Solve:
                 
     def compute_final_solution(self):
         """
-        Calcule la solution finale en utilisant la formule du schéma DIRK.
+        Compute the final solution for the current time step.
         
-        Pour BDF1, utilise directement la solution de l'étape unique.
-        Pour les méthodes d'ordre supérieur, applique la formule complète du schéma DIRK.
+        For BDF1, uses the solution directly from the single stage.
+        For higher-order methods, applies the complete DIRK update formula.
         """
         if self.dirk_method == "BDF1":
             # Pour BDF1, la solution est déjà correcte (méthode à une étape)
@@ -408,10 +450,10 @@ class Solve:
 
     def update_fields(self):
         """
-        Met à jour les champs pour le pas de temps suivant.
+        Update fields for the next time step.
         
-        Copie les solutions du pas de temps courant vers les champs "n"
-        pour la prochaine itération.
+        Copies the solutions from the current time step to the 'n' fields
+        for the next iteration, and updates artificial viscosity if needed.
         """
         for x, x_n in zip(self.pb.U, self.pb.U_n):
             x_n.x.array[:] = x.x.array

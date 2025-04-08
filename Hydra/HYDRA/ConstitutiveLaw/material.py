@@ -3,23 +3,66 @@ Created on Fri Mar 11 09:28:55 2022
 
 @author: bouteillerp
 """
+"""
+Material models for compressible fluid dynamics simulations
+==========================================================
+
+This module provides a comprehensive framework for defining and managing material properties
+in compressible fluid dynamics simulations. It includes classes for different equation of state
+(EOS) models and deviatoric behavior models.
+
+The main components include:
+- Material: Main class for defining material properties
+- U_EOS: Hyperelastic equation of state (U1-U8 family)
+- GP_EOS: Ideal gas equation of state (gamma-law)
+- None_deviatoric: Default deviatoric behavior (purely hydrostatic)
+
+The module supports various material models with different complexity levels, from simple
+ideal gases to complex hyperelastic materials. Each material can be defined by combining
+an equation of state with a deviatoric behavior model.
+
+Classes:
+--------
+Material : Main class for material definition
+    Manages material properties, equation of state, and deviatoric behavior
+    Provides methods for selecting and configuring material models
+    
+U_EOS : Hyperelastic equation of state
+    Implements the U-family of hyperelastic EOS (U1-U8)
+    Provides methods for pressure and sound speed calculation
+    
+GP_EOS : Ideal gas equation of state
+    Implements the gamma-law equation of state for ideal gases
+    Provides methods for pressure and sound speed calculation
+    
+None_deviatoric : Default deviatoric behavior
+    Implements pure hydrostatic behavior (no deviatoric stresses)
+
+Notes:
+------
+The Material class allows for modular definition of material behavior by combining
+different EOS models with different deviatoric behavior models.
+Additional material models can be added by extending the appropriate classes.
+"""
+
+
 from math import sqrt
 
 class Material:
-    def __init__(self, rho_0, C_mass, eos_type, dev_type, dico_eos, dico_devia, **kwargs):
+    def __init__(self, rho_0, C_mass, eos_type, dev_type, dico_eos, dico_devia):
         """
-        Création du matériau à l'étude.
+        Initialize a material model for fluid dynamics simulations.
+        Create a material with specified density, heat capacity, equation of state,
+        and deviatoric behavior.
+        
         Parameters
         ----------
-        rho_0 : Float or Expression, masse volumique initiale M.L^{-3}
-        C_mass : Function ou Float, capacité thermique massique en J.K^{-1}.kg^{-1} (= M.L^{2}.T^{-2}.K^{-1})
-        eos_type : String, type d'équation d'état souhaitée.
-        dev_type : String, type d'équation déviatorique souhaitée.
-        dico_eos : Dictionnaire, dico contenant les paramètres nécessaires
-                                    à la création du modèle d'équation d'état.
-        dico_devia : Dictionnaire, dico contenant les paramètres nécessaires
-                                    à la création du modèle de comportement déviatorique.
-        **kwargs : Paramètres optionnels supplémentaires utilisé pour la détonique
+        rho_0 : float or Expression Initial mass density (M.L^-3)
+        C_mass : float or Function Mass heat capacity in J.K^-1.kg^-1 (= M.L^2.T^-2.K^-1)
+        eos_type : str Type of equation of state model ('U1', 'U2', ..., 'GP', etc.)
+        dev_type : str or None Type of deviatoric behavior model (None for purely hydrostatic behavior)
+        dico_eos : dict Dictionary containing parameters required for the equation of state model
+        dico_devia : dict Dictionary containing parameters required for the deviatoric model
         """
         self.rho_0 = rho_0
         self.C_mass = C_mass
@@ -35,13 +78,21 @@ class Material:
         
     def eos_selection(self, eos_type):
         """
-        Retourne le nom de la classe associée au modèle d'EOS choisi.
+        Select the appropriate equation of state class based on type.
+        
+        Maps the EOS type string to the corresponding EOS class implementation.
+        
         Parameters
         ----------
-        dev_type : String, nom du modèle d'équation d'état.
+        eos_type : str Type of equation of state model ('U1', 'U2', ..., 'GP', etc.)
+            
+        Returns
+        -------
+        class The EOS class corresponding to the specified type
+            
         Raises
         ------
-        ValueError, erreur si un comportement déviatorique inconnu est demandé.
+        ValueError If an unknown EOS type is specified
         """
         if eos_type in ["U1", "U2", "U3", "U4", "U5", "U7", "U8"]:
             return U_EOS
@@ -52,14 +103,21 @@ class Material:
         
     def deviatoric_selection(self, dev_type):
         """
-        Retourne le nom de la classe associée au modèle déviatorique retenu.
+        Select the appropriate deviatoric behavior class based on type.
+        
+        Maps the deviatoric behavior type string to the corresponding class implementation.
+        
         Parameters
         ----------
-        dev_type : String, nom du modèle déviatorique parmi:
-                            None, IsotropicHPP, NeoHook, MooneyRivlin.
+        dev_type : str or None Type of deviatoric behavior model (None for purely hydrostatic behavior)
+            
+        Returns
+        -------
+        class The deviatoric behavior class corresponding to the specified type
+            
         Raises
         ------
-        ValueError, erreur si un comportement déviatorique inconnu est demandé.
+        ValueError If an unknown deviatoric behavior type is specified
         """
         if dev_type == None:
             return None_deviatoric
@@ -69,13 +127,21 @@ class Material:
 class U_EOS:
     def __init__(self, dico):
         """
-        Défini un objet possédant une équation d'état hyper-élastique isotrope 
-        à un coefficient.
-
+        Initialize a hyperelastic isotropic one-parameter equation of state.
+        
+        Creates a hyperelastic isotropic equation of state with a single
+        compressibility parameter (kappa) and thermal expansion coefficient.
+        
         Parameters
         ----------
-        kappa : Float, module de compressibilité
-        alpha : Float, coefficient de dilatation thermique en K^{-1}
+        dico : dict
+            Dictionary containing the EOS parameters:
+            - kappa: Bulk modulus
+            - alpha: Thermal expansion coefficient in K^-1
+            
+        Raises
+        ------
+        ValueError If the required parameters are not provided in the dictionary
         """
         try:
             self.kappa = dico["kappa"]
@@ -88,19 +154,35 @@ class U_EOS:
         
     def celerity(self, rho_0):
         """
-        Renvoie une estimation de la célérité des ondes élastique 
-        dans un milieu hyper-élastique.       
+        Calculate the elastic wave speed in the hyperelastic medium.
+        
+        Computes an estimate of the elastic wave speed (sound speed) in a
+        hyperelastic medium based on the bulk modulus and initial density.
+        
+        Parameters
+        ----------
+        rho_0 : float Initial mass density
+            
+        Returns
+        -------
+        float Estimated sound speed (c = sqrt(kappa/rho_0))
         """
         return sqrt(self.kappa / rho_0)
 
 class GP_EOS:
     def __init__(self, dico):
         """
-        Défini les paramètres d'un gaz suivant la loi des gaz parfaits. 
+        Initialize an ideal gas (gamma-law) equation of state.
+        
         Parameters
         ----------
-        gamma : Float, coefficient polytropique du gaz.
-        e_max : fFoat, estimation de l'énergie interne massique maximale (ne sert que pour estimation CFL)
+        dico : dict
+            Dictionary containing the EOS parameters:
+            - gamma: Polytropic coefficient (ratio of specific heats Cp/Cv)
+            
+        Raises
+        ------
+        ValueError If the required parameter (gamma) is not provided in the dictionary
         """
         try:
             self.gamma = dico["gamma"]
@@ -111,8 +193,22 @@ class GP_EOS:
         
     def celerity(self, rho_0):
         """
-        Renvoie une estimation de la célérité des ondes accoustiques
+        Calculate the acoustic wave speed in the ideal gas.
+        
+        This method is implemented as a placeholder in the base class.
+        The actual sound speed calculation for ideal gases depends on temperature
+        and is typically computed as c = sqrt(gamma*p/rho) during simulation.
+        
+        Parameters
+        ----------
+        rho_0 : float Initial mass density
+            
+        Returns
+        -------
+        None This base implementation returns None and is expected to be
+            overridden or implemented differently during simulation
         """
+        return
         return
 
 class None_deviatoric:

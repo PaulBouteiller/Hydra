@@ -26,14 +26,12 @@ HYDRA is an computational fluid dynamics (CFD) framework built on DOLFINx, a com
 
 HYDRA supports multiple equations of state:
 - **Ideal Gas (GP)**: Perfect gas law
-- **Compressible Hyperelastic (U1)**: Single coefficient hyperelastic model
+- **Simple Compressible Hyperelastic (U1)**: Single coefficient hyperelastic model
 
 ### Boundary Conditions
 
 Various boundary conditions are available:
 - Wall boundary conditions
-- Pressure boundary conditions
-- Inflow/outflow conditions
 
 ### Time Integration Schemes
 

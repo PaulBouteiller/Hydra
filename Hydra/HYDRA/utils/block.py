@@ -1,8 +1,4 @@
-"""
-Created on Wed Jan  8 18:07:35 2025
 
-@author: bouteillerp
-"""
 """
 Block manipulation utilities for UFL forms and matrices
 ======================================================

@@ -426,9 +426,7 @@ class Tabulated_BCs:
                     self.value_array.append(self.amplitude)
                 else:
                     self.value_array.append(0)
-    f = interpolate.interp1d(temps_originaux, valeurs_originales)
-    return f(nouveaux_temps)
-
+                    
 class MyConstant:
     def __init__(self, mesh, *args, **kwargs):
         if kwargs.get("Type") == "Creneau":

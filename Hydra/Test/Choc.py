@@ -42,7 +42,7 @@ class Square(CompressibleEuler):
             return "Test"
             
     def set_boundary(self):
-        self.mark_boundary([1, 2, 3, 4], ["x", "x", "y", "y"], [0, Longueur, 0, Largeur])
+        self.mesh_manager.mark_boundary([1, 2, 3, 4], ["x", "x", "y", "y"], [0, Longueur, 0, Largeur])
         
  
     def set_boundary_conditions(self):

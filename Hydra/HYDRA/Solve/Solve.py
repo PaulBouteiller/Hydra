@@ -79,17 +79,16 @@ class Solve:
             - compteur : int, optional Export frequency (1 = every time step)
         """
         self.pb = problem
-        self.initialize_solve(problem, **kwargs)
+        self.initialize_solve(**kwargs)
         print("Starting simulation")       
         self.run_simulation(**kwargs)
 
-    def initialize_solve(self, problem, **kwargs):
+    def initialize_solve(self, **kwargs):
         """
         Initialize the solver components and parameters.
 
         Parameters
         ----------
-        problem : Problem The fluid dynamics problem to solve
         **kwargs : dict Additional configuration parameters
         """
         # Initialisation du problème
@@ -146,6 +145,9 @@ class Solve:
         petsc_options, structure_type, debug = default_Newton_parameters()
         self.solver = create_newton_solver(structure_type, Fr_form, self.pb.u_list, 
                                            J_form, petsc_options, debug, self.pb.bc_class.bcs)
+    
+        # from dolfiny import snesblockproblem
+        # self.solver = snesblockproblem.SNESBlockProblem(Fr_form, self.pb.u_list, bcs = self.pb.bc_class.bcs, J_form = J_form)
 
     def setup_time_parameters(self, **kwargs):
         """

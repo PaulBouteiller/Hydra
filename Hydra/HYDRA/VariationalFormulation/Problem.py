@@ -94,6 +94,7 @@ class BoundaryConditions:
         self.n = n
         self.boundary_residual = Constant(facet_mesh, ScalarType(0)) * Ubar_test[0] * ds
         self.mcl = []
+        # self.S = S
         
         self.tdim = tdim
         self.facet_mesh = facet_mesh

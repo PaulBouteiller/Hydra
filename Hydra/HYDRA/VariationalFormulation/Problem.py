@@ -404,7 +404,7 @@ class Problem:
     Derived classes implement specific equation types (Euler, Navier-Stokes)
     by extending and specializing this base framework.
     """
-    def __init__(self, material, dt, initial_mesh = None, **kwargs):
+    def __init__(self, material, simulation_dic, dt, initial_mesh = None, **kwargs):
         """
         Initialize the problem.
         
@@ -417,10 +417,6 @@ class Problem:
                             - analysis: "dynamic" or "static"
                             - isotherm: Whether to use isothermal model
         """
-        if initial_mesh == None:
-            self.mesh = self.define_mesh()
-        else:
-            self.mesh = initial_mesh
         if COMM_WORLD.Get_size()>1:
             print("Parallel computation")
             self.mpi_bool = True
@@ -429,6 +425,7 @@ class Problem:
             self.mpi_bool = False
         self.analysis = kwargs.get("analysis", "dynamic")
         self.iso_T = kwargs.get("isotherm", False)
+        self.mesh = simulation_dic["mesh"]
         self.tdim = self.mesh.topology.dim
         self.fdim = self.tdim - 1
         self.dt = dt
@@ -442,13 +439,16 @@ class Problem:
         self.h = self.mesh_manager.h
 
         # Set parameters and update from user
-        self.fem_parameters()
+        self.deg = simulation_dic.get("fem_degree", default_fem_parameters().get("u_degree"))
         
         # Material properties
         self.material = material
 
         # MeshFunctions and Measures for different domains and boundaries
-        self.set_boundary()
+        # self.set_boundary()
+        boundary_setup = simulation_dic["boundary_setup"]
+        self.mesh_manager.mark_boundary(boundary_setup["tags"], boundary_setup["coordinate"], boundary_setup["positions"])
+        
         self.set_measures()
         self.facet_tag = self.mesh_manager.facet_tag
         self.flag_list = self.mesh_manager.flag_list
@@ -475,26 +475,28 @@ class Problem:
                         self.tdim, self.entity_maps, self.facet_tag, self.dico_Vbar
                     )
         self.bcs = []
-        self.set_boundary_conditions()
+        boundary_conditions_config = simulation_dic["boundary_conditions"]
+
+        for bc_config in boundary_conditions_config:
+            bc_type = bc_config["type"]
+            tag = bc_config["tag"]
+            if bc_type == "wall":
+                direction = bc_config["direction"]
+                self.bc_class.wall_residual(tag, direction)
+            elif bc_type == "sticky_wall":
+                self.bc_class.sticky_wall_residual(tag)
+            elif bc_type == "pressure":
+                value = bc_config["value"]
+                self.bc_class.pressure_residual(value, tag)
+            elif bc_type == "wall_with_rho":
+                rho_value = bc_config["rho_value"]
+                rhoE_value = bc_config["rhoE_value"]
+                direction = bc_config["direction"]
+                self.bc_class.wall_residual_with_rho(tag, direction, rho_value, rhoE_value)
         
         # Set up variational formulation
         print("Starting setting up variational formulation")
         self.set_form()
-        
-    def set_output(self):
-        return {}
-    
-    def query_output(self, t):
-        return {}
-    
-    def final_output(self):
-        pass
-    
-    def csv_output(self):
-        return {}
-    
-    def prefix(self):
-        return "problem"
 
     def set_measures(self):
         """
@@ -518,19 +520,6 @@ class Problem:
         p_elem = self.EOS.set_eos(self.U, self.material)
         self.p_expr = Expression(p_elem, self.V_rho.element.interpolation_points())
         self.p_func = Function(self.V_rho, name = "Pression")      
-        
-    def fem_parameters(self):
-        """
-        Configure finite element parameters.
-        
-        Sets up polynomial degree and other FEM-specific configuration
-        based on default settings or user overrides.
-        """
-        fem_parameters = default_fem_parameters()
-        self.deg = fem_parameters.get("u_degree")
-        
-    def set_initial_conditions(self):
-        pass
     
     def update_bcs(self, num_pas):
         pass

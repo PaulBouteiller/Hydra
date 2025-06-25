@@ -64,7 +64,7 @@ class Solve:
     algebraically stable high-order methods.
     """
 
-    def __init__(self, problem, **kwargs):
+    def __init__(self, problem, dictionnaire = None, **kwargs):
         """
         Initialize the solver for time-dependent simulation.
         
@@ -79,11 +79,9 @@ class Solve:
             - compteur : int, optional Export frequency (1 = every time step)
         """
         self.pb = problem
-        self.initialize_solve(**kwargs)
-        print("Starting simulation")       
-        self.run_simulation(**kwargs)
+        self.initialize_solve(dictionnaire, **kwargs)
 
-    def initialize_solve(self, **kwargs):
+    def initialize_solve(self, dictionnaire, **kwargs):
         """
         Initialize the solver components and parameters.
 
@@ -92,11 +90,10 @@ class Solve:
         **kwargs : dict Additional configuration parameters
         """
         # Initialisation du problème
-        self.pb.set_initial_conditions()
         self.t = 0
         
         # Configuration de l'export des résultats
-        self.setup_export(**kwargs)
+        self.setup_export(dictionnaire)
         
         # Configuration du solveur non-linéaire
         self.setup_solver()
@@ -107,7 +104,7 @@ class Solve:
         # Initialisation du schéma DIRK
         self.setup_dirk_scheme(**kwargs)
         
-    def setup_export(self, **kwargs):
+    def setup_export(self, dictionnaire):
         """
         Configure the result export system.
         
@@ -120,9 +117,9 @@ class Solve:
         """
         self.export = ExportResults(
             self.pb, 
-            kwargs.get("Prefix", self.pb.prefix()), 
-            self.pb.set_output(), 
-            self.pb.csv_output()
+            dictionnaire.get("Prefix", "Problem"), 
+            dictionnaire.get("output", {}),
+            dictionnaire.get("csv_output", {})
         )
         self.export_results(self.t)
         
@@ -232,7 +229,6 @@ class Solve:
         ----------
         t : float Current simulation time
         """
-        self.pb.query_output(t)
         self.export.export_results(t)
         self.export.csv.csv_export(t)
 
@@ -281,7 +277,6 @@ class Solve:
         
         # Finalisation
         self.export.csv.close_files()
-        self.pb.final_output()
             
     def handle_output(self, compteur_output):
         """
@@ -310,7 +305,6 @@ class Solve:
         j : int Current time step index
         """
         self.t = self.load_steps[j]
-        
         # Calcul des temps intermédiaires pour les étapes DIRK
         self.stage_times = [self.t + self.dirk_params.c[s] * self.dt for s in range(self.num_stages)]
     

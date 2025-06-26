@@ -76,7 +76,7 @@ class EulerBoundaryConditions(BoundaryConditions):
     facet_tag : MeshTags Tags for facets
     dico_Vbar : dict Function spaces for facet variables
     """  
-        self.V_rhovbar, self.V_rhobar, self.V_rhoEbar = dico_Vbar.get("Velocity"), dico_Vbar.get("Density"), dico_Vbar.get("Energy")
+        self.V_rhovbar, self.V_rhobar, self.V_rhoebar = dico_Vbar.get("Velocity"), dico_Vbar.get("Density"), dico_Vbar.get("Energy")
         super().__init__(U, Ubar, Ubar_test, facet_mesh, EOS, n, ds, tdim, entity_maps, facet_tag)
     
     def wall_residual(self, tag, normal):
@@ -104,7 +104,7 @@ class EulerBoundaryConditions(BoundaryConditions):
         res_E = - inner(self.U[2] - self.Ubar[2], self.Ubar_test[2]) * self.ds(tag)
         self.boundary_residual += res_rho + res_u + res_E
         
-    def wall_residual_with_rho(self, tag, normal, rho_value, rhoE_value):
+    def wall_residual_with_rho(self, tag, normal, rho_value, rhoe_value):
         """
         Apply wall boundary with specified density and energy.
         
@@ -116,11 +116,11 @@ class EulerBoundaryConditions(BoundaryConditions):
         tag : int Boundary tag for the wall
         normal : str Direction of the wall normal ('x', 'y', or 'z')
         rho_value : float Density value at the wall
-        rhoE_value : float Energy density value at the wall
+        rhoe_value : float Energy density value at the wall
         """
         self.wall_residual(tag, normal)
         self.add_component(self.V_rhobar, None, tag, ScalarType(rho_value))
-        self.add_component(self.V_rhoEbar, None, tag, ScalarType(rhoE_value))
+        self.add_component(self.V_rhoebar, None, tag, ScalarType(rhoe_value))
 
 class CompressibleEuler(Problem):
     """
@@ -177,7 +177,7 @@ class CompressibleEuler(Problem):
         """
         self.V_rho = functionspace(self.mesh, ("DG", self.deg))
         self.V_rhov = functionspace(self.mesh, ("DG", self.deg, (self.tdim, )))
-        self.V_rhoE = functionspace(self.mesh, ("DG", self.deg))
+        self.V_rhoe = functionspace(self.mesh, ("DG", self.deg))
         
         # quad_element = quadrature_element(self.mesh.topology.cell_type, degree = self.deg + 1)
 
@@ -185,7 +185,7 @@ class CompressibleEuler(Problem):
         # V_quad = functionspace(self.mesh, quad_element)
         self.V_rhobar = functionspace(self.facet_mesh, ("DG", self.deg))
         self.V_rhovbar = functionspace(self.facet_mesh, ("DG", self.deg, (self.tdim, )))
-        self.V_rhoEbar = functionspace(self.facet_mesh, ("DG", self.deg))
+        self.V_rhoebar = functionspace(self.facet_mesh, ("DG", self.deg))
        
     def set_functions(self):   
         """
@@ -195,24 +195,24 @@ class CompressibleEuler(Problem):
         both for interior and facet representations.
         """      
         self.rho = Function(self.V_rho, name = "Density")
-        self.rhou = Function(self.V_rhov, name = "Momentum")
-        self.rhoE = Function(self.V_rho, name = "Energy density")
-        self.rho_n, self.rhou_n, self.rhoE_n = Function(self.V_rho), Function(self.V_rhov), Function(self.V_rhoE)
+        self.rhov = Function(self.V_rhov, name = "Momentum")
+        self.rhoe = Function(self.V_rho, name = "Energy density")
+        self.rho_n, self.rhov_n, self.rhoe_n = Function(self.V_rho), Function(self.V_rhov), Function(self.V_rhoe)
         
-        self.s_rho, self.s_rhou, self.s_rhoE = Function(self.V_rho), Function(self.V_rhov), Function(self.V_rhoE)
+        self.s_rho, self.s_rhov, self.s_rhoe = Function(self.V_rho), Function(self.V_rhov), Function(self.V_rhoe)
 
-        self.rhobar, self.rhoubar, self.rhoEbar = Function(self.V_rhobar), Function(self.V_rhovbar), Function(self.V_rhoEbar)
+        self.rhobar, self.rhovbar, self.rhoebar = Function(self.V_rhobar), Function(self.V_rhovbar), Function(self.V_rhoebar)
 
         self.rho.x.petsc_vec.set(self.material.rho_0)
         self.rho_n.x.petsc_vec.set(self.material.rho_0)
         self.rhobar.x.petsc_vec.set(self.material.rho_0)    
         
-        self.U = [self.rho, self.rhou, self.rhoE]
-        self.Ubar = [self.rhobar, self.rhoubar, self.rhoEbar]
-        self.U_n = [self.rho_n, self.rhou_n, self.rhoE_n]
-        self.s = [self.s_rho, self.s_rhou, self.s_rhoE]
+        self.U = [self.rho, self.rhov, self.rhoe]
+        self.Ubar = [self.rhobar, self.rhovbar, self.rhoebar]
+        self.U_n = [self.rho_n, self.rhov_n, self.rhoe_n]
+        self.s = [self.s_rho, self.s_rhov, self.s_rhoe]
         
-        self.dico_Vbar = {"Density" : self.V_rhobar, "Velocity" : self.V_rhovbar, "Energy" : self.V_rhoEbar}
+        self.dico_Vbar = {"Density" : self.V_rhobar, "Velocity" : self.V_rhovbar, "Energy" : self.V_rhoebar}
         
     def set_variable_to_solve(self):
         """
@@ -233,14 +233,14 @@ class CompressibleEuler(Problem):
         Sets up the test and trial functions for both interior and facet
         variables, with special handling for isothermal cases.
         """
-        MFS = MixedFunctionSpace(self.V_rho, self.V_rhov, self.V_rhoE,
-                                 self.V_rhobar, self.V_rhovbar, self.V_rhoEbar)  
-        rho_, rhou_, rhoE_, rhobar_, rhoubar_, rhoEbar_ = TestFunctions(MFS)
-        drho, drhou, drhoE, drhobar, drhoubar, drhoEbar = TrialFunctions(MFS)
-        self.U_test = [rho_, rhou_, rhoE_]
-        self.Ubar_test = [rhobar_, rhoubar_, rhoEbar_]
-        self.dU = [drho, drhou, drhoE]
-        self.dUbar = [drhobar, drhoubar, drhoEbar]
+        MFS = MixedFunctionSpace(self.V_rho, self.V_rhov, self.V_rhoe,
+                                 self.V_rhobar, self.V_rhovbar, self.V_rhoebar)  
+        rho_, rhov_, rhoe_, rhobar_, rhovbar_, rhoebar_ = TestFunctions(MFS)
+        drho, drhov, drhoe, drhobar, drhovbar, drhoebar = TrialFunctions(MFS)
+        self.U_test = [rho_, rhov_, rhoe_]
+        self.Ubar_test = [rhobar_, rhovbar_, rhoebar_]
+        self.dU = [drho, drhov, drhoe]
+        self.dUbar = [drhobar, drhovbar, drhoebar]
         if self.iso_T:
             self.du_list = self.dU[:2] + self.dUbar[:2]
             self.u_test_list = self.U_test[:2] + self.Ubar_test[:2]

@@ -490,9 +490,9 @@ class Problem:
                 self.bc_class.pressure_residual(value, tag)
             elif bc_type == "wall_with_rho":
                 rho_value = bc_config["rho_value"]
-                rhoE_value = bc_config["rhoE_value"]
+                rhoe_value = bc_config["rhoe_value"]
                 direction = bc_config["direction"]
-                self.bc_class.wall_residual_with_rho(tag, direction, rho_value, rhoE_value)
+                self.bc_class.wall_residual_with_rho(tag, direction, rho_value, rhoe_value)
         
         # Set up variational formulation
         print("Starting setting up variational formulation")

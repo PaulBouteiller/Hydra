@@ -41,7 +41,8 @@ dissipation and are suitable for capturing complex physical phenomena.
 
 from .customNewton import create_newton_solver
 # from .SNESBlock2 import BlockedSNESSolver
-from ..utils.block import extract_rows, derivative_block
+from ufl import extract_blocks
+from ..utils.block import derivative_block
 from ..utils.default_parameters import default_Newton_parameters
 from ..Export.export_result import ExportResults
 from ..utils.dirk_parameters import DIRKParameters
@@ -131,12 +132,12 @@ class Solve:
         at each time step or stage, including residual and Jacobian forms.
         """
         # Extraction du résidu et du jacobien
-        Fr = extract_rows(self.pb.residual, self.pb.u_test_list)
+        Fr = extract_blocks(self.pb.residual)
         J = derivative_block(Fr, self.pb.u_list, self.pb.du_list)
         
         # Création des formulaires
-        Fr_form = form(Fr, entity_maps=self.pb.entity_maps)
-        J_form = form(J, entity_maps=self.pb.entity_maps)
+        Fr_form = form(Fr, entity_maps = self.pb.entity_maps)
+        J_form = form(J, entity_maps = self.pb.entity_maps)
         
         # Configuration des options PETSc
         petsc_options, structure_type, debug = default_Newton_parameters()
@@ -204,7 +205,7 @@ class Solve:
                 elif space_idx == 1:  # Vitesse
                     space = self.pb.V_rhov
                 else:  # Énergie ou autres variables
-                    space = self.pb.V_rhoE
+                    space = self.pb.V_rhoe
                 
                 # Créer les fonctions pour cette étape
                 stage_sol.append(Function(space))

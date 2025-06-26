@@ -42,21 +42,20 @@ num_time_steps = int(t_end/dt)
 
 msh = create_rectangle(MPI.COMM_WORLD, [(0, 0), (Longueur, Largeur)], [Nx, 1], CellType.quadrilateral)
 
-dictionnaire = {
-    "fem_degree": degree,
-    "mesh" : msh,
-    "boundary_setup": {
-        "tags": [1, 2, 3, 4],
-        "coordinate": ["x", "x", "y", "y"], 
-        "positions": [0, Longueur, 0, Largeur]
-    },
-    "boundary_conditions": [
-    {"type": "wall", "tag": 1, "direction": "x"},
-    {"type": "wall", "tag": 2, "direction": "x"},
-    {"type": "wall", "tag": 3, "direction": "y"},
-    {"type": "wall", "tag": 4, "direction": "y"}
-]
-}
+dictionnaire = {"fem_degree": degree,
+                "mesh" : msh,
+                "boundary_setup": 
+                    {"tags": [1, 2, 3, 4],
+                     "coordinate": ["x", "x", "y", "y"], 
+                     "positions": [0, Longueur, 0, Largeur]
+                     },
+                "boundary_conditions": 
+                    [{"type": "wall", "tag": 1, "direction": "x"},
+                     {"type": "wall", "tag": 2, "direction": "x"},
+                     {"type": "wall", "tag": 3, "direction": "y"},
+                     {"type": "wall", "tag": 4, "direction": "y"}
+                    ]
+                }
 
 pb = CompressibleEuler(Gaz, dictionnaire, dt)
 

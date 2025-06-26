@@ -14,10 +14,9 @@ import ufl
 from dolfinx.fem import petsc
 import basix
 from scipy.optimize import nnls
+from basix.ufl import quadrature_element, blocked_element
 
-
-
-def create_custom_quadrature_element(degree, equal_weight=True):
+def create_custom_quadrature_element(degree, equal_weight=True, el_type = "Scalar"):
     """ 
     Cette procédure est fondée sur l'article:
      Stable high-order quadrature rules with equidistant points   Daan Huybrechs ∗ ,1
@@ -49,13 +48,18 @@ def create_custom_quadrature_element(degree, equal_weight=True):
         weights, _ = nnls(A, b)
         weights = weights / np.sum(weights)
     
-    element = basix.ufl.quadrature_element(
+    element = quadrature_element(
         cell="quadrilateral",
         points=points,
         weights=weights,
         degree = int(degree)
     )
-    return element
+    if el_type == "Scalar":
+        return element
+    elif el_type == "Vector":
+        vector_element = blocked_element(element, shape=(2,))
+        
+        return vector_element
 
 def init_L2_projection_on_V(u, source_term, bcs = []):
     V = u.function_space
@@ -87,9 +91,10 @@ def map_indices(arr1, arr2, rtol=1e-5, atol=1e-8):
         except:
             # Fallback sur array_equal si allclose échoue
             return np.array_equal(a, b)
-    
-    return np.array([np.where([arrays_close(arr1[i], x, rtol, atol) for x in arr2])[0][0] for i in range(len(arr1))])
+    assert len(arr1) == len(arr2)
+    map_list = [np.where([arrays_close(arr1[i], x, rtol, atol) for x in arr2])[0][0] for i in range(len(arr1))]
+    return np.array(map_list)
 
-def quadrature_space_jax_array_to_mapping(Q, jax_array):
-    quad_array = Q.tabulate_dof_coordinates()
-    return map_indices(quad_array, np.asarray(jax_array))
+# def quadrature_space_jax_array_to_mapping(Q, jax_array):
+#     quad_array = Q.tabulate_dof_coordinates()
+#     return map_indices(quad_array, np.asarray(jax_array))

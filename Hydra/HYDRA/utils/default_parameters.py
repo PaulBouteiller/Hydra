@@ -118,7 +118,7 @@ def default_Newton_parameters():
             "mat_mumps_cntl_7": 1e-8  # Tolérance BLR
         })
     structure_type = "block"
-    debug = False
+    debug = True
     
     return solver_u, structure_type, debug
 

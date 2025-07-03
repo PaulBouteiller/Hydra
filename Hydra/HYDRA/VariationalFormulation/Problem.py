@@ -45,7 +45,7 @@ from ..utils.default_parameters import default_fem_parameters, default_shock_cap
 from ..utils.MyExpression import MyConstant
 
 from numpy import (hstack, argsort, finfo, full_like, arange, int32, unique, 
-                    tile, repeat, vstack, full, zeros, array)
+                    tile, repeat, vstack, full, zeros, array, ndarray)
 
 from dolfinx.fem import (compute_integration_domains, dirichletbc, locate_dofs_topological,
                           IntegralType, Constant, Expression, Function, functionspace)
@@ -126,10 +126,13 @@ class BoundaryConditions:
                 return space.sub(isub)
             
         def bc_value(value):
-            if isinstance(value, float) or isinstance(value, Constant):
+            if isinstance(value, float) or isinstance(value, Constant) or isinstance(value, ndarray):
                 return value
             elif isinstance(value, MyConstant):
                 return value.Expression.constant
+            else:
+                raise ValueError("Wrong value type")
+                
         msh_to_facet_mesh = self.entity_maps[self.facet_mesh]
         facets = msh_to_facet_mesh[self.facet_tag.indices[self.facet_tag.values == region]]
         
@@ -358,8 +361,9 @@ class MeshManager:
         # Degrés de quadrature
         # quad_deg_facet = (deg + 1) ** (self.tdim - 1)
         quad_deg_facet = (2 * deg + 1) ** (self.tdim)
+        print(f"Nombre de points de Gauss en facette: {quad_deg_facet}")
         quad_deg_volume = (deg + 1) ** self.tdim
-        print(f"Nombre de points de Gauss: {quad_deg_volume}")
+        print(f"Nombre de points de Gauss en volume: {quad_deg_volume}")
         
         # Définir les mesures
         self.dx_c = Measure("dx", domain=self.mesh, metadata={"quadrature_degree": quad_deg_volume})

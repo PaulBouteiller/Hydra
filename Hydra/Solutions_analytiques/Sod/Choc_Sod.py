@@ -20,20 +20,20 @@ p_gauche = 1.0
 p_droite = 0.1
         
 # Calcul de l'énergie interne spécifique (e) à partir de l'équation d'état du gaz parfait e = p/(rho*(gamma-1))
-rhoE_gauche = p_gauche / (gamma - 1.0)
-rhoE_droite = p_droite / (gamma - 1.0)
+rhoe_gauche = p_gauche / (gamma - 1.0)
+rhoe_droite = p_droite / (gamma - 1.0)
 
 dico_eos = {"gamma": gamma}  # équation d'état de type gaz parfait
 dico_devia = {}
 Gaz = Material(rho0, 1, "GP", None, dico_eos, dico_devia)
 
 #Degré d'interpolation #~Volumes finis si degré 0.
-degree = 0
+degree = 1
     
-Nx = int(400 / (degree + 1))
+Nx = int(200 / (degree + 1))
 
 Longueur = 1
-Largeur = 0.1 / Nx
+Largeur = 1 / Nx
 
 # Paramètres temporels
 t_end = 0.1  # temps final classique pour Sod
@@ -41,6 +41,7 @@ dt = 1e-3    # pas de temps
 num_time_steps = int(t_end/dt)
 
 msh = create_rectangle(MPI.COMM_WORLD, [(0, 0), (Longueur, Largeur)], [Nx, 1], CellType.quadrilateral)
+# msh = create_rectangle(MPI.COMM_WORLD, [(0, 0), (Longueur, Largeur)], [Nx, 1])
 
 dictionnaire = {"fem_degree": degree,
                 "mesh" : msh,
@@ -76,27 +77,27 @@ def set_initial_conditions(problem):
     problem.rho_n.interpolate(rho_expression)
     
     # Initialisation de l'énergie totale
-    rhoE_expr = conditional(lt(x[0], x_diaphragme), rhoE_gauche, rhoE_droite)
-    rhoE_expression = Expression(rhoE_expr, problem.V_rhoE.element.interpolation_points())
-    problem.rhoE.interpolate(rhoE_expression)
-    problem.rhoE_n.interpolate(rhoE_expression)
+    rhoe_expr = conditional(lt(x[0], x_diaphragme), rhoe_gauche, rhoe_droite)
+    rhoe_expression = Expression(rhoe_expr, problem.V_rhoe.element.interpolation_points())
+    problem.rhoe.interpolate(rhoe_expression)
+    problem.rhoe_n.interpolate(rhoe_expression)
 
     # Initialisation des variables aux interfaces pour HDG
     x_facet = SpatialCoordinate(problem.facet_mesh)
     rho_facet_expr = conditional(lt(x_facet[0], x_diaphragme), rho_gauche, rho_droite)
-    rhoE_facet_expr = conditional(lt(x_facet[0], x_diaphragme), rhoE_gauche, rhoE_droite)
+    rhoe_facet_expr = conditional(lt(x_facet[0], x_diaphragme), rhoe_gauche, rhoe_droite)
     
     rhobar_expression = Expression(rho_facet_expr, problem.V_rhobar.element.interpolation_points())
     problem.rhobar.interpolate(rhobar_expression)
     
-    rhoEbar_expression = Expression(rhoE_facet_expr, problem.V_rhoEbar.element.interpolation_points())
-    problem.rhoEbar.interpolate(rhoEbar_expression)
+    rhoebar_expression = Expression(rhoe_facet_expr, problem.V_rhoebar.element.interpolation_points())
+    problem.rhoebar.interpolate(rhoebar_expression)
 
 set_initial_conditions(pb)
 
 dictionnaire_solve = {
     "Prefix" : "SodShockTube",
-    "csv_output" : {"rho" : True, "Pressure" : True}
+    "csv_output" : {"rho" : True, "Pressure" : True, "rhov" : True, "rhovbar" : True}
     }
 Solver = Solve(pb, dictionnaire_solve, dirk_method = "BDF1", TFin=t_end, dt=dt)
 Solver.run_simulation()
@@ -173,3 +174,7 @@ axarr[1].set_ylim(0, 1.1)
 
 plt.suptitle('Shocktube results at t={0}\ndust fraction = {1}, gamma={2}'
               .format(t_end, dustFrac, gamma))
+
+from pyvista4dolfinx import plot
+
+plot(pb.rho, warp=True, show=True)

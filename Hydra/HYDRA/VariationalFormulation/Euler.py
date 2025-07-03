@@ -44,6 +44,7 @@ from petsc4py.PETSc import ScalarType
 from dolfinx.fem import functionspace, Function
 
 # from basix.ufl import quadrature_element
+from numpy import zeros
 
 from .Problem import Problem, BoundaryConditions
 from ..utils.generic_functions import euler_eigenvalues_2D, max_abs_of_sequence
@@ -91,13 +92,16 @@ class EulerBoundaryConditions(BoundaryConditions):
         tag : int Boundary tag for the wall
         normal : str Direction of the wall normal ('x', 'y', or 'z')
         """
-        if normal == "x":
-            sub = 0
-        elif normal == "y":
-            sub = 1
-        elif normal == "z":
-            sub = 2
-        self.add_component(self.V_rhovbar, sub, tag, ScalarType(0))
+        if normal == None:
+            self.add_component(self.V_rhovbar, None, tag, zeros((1,)))
+        else:
+            if normal == "x":
+                sub = 0
+            elif normal == "y":
+                sub = 1
+            elif normal == "z":
+                sub = 2
+            self.add_component(self.V_rhovbar, sub, tag, ScalarType(0))
         res_rho = - inner(self.U[0] - self.Ubar[0], self.Ubar_test[0]) * self.ds(tag)
         res_u = - inner(self.U[1] - dot(self.U[1], self.n) * self.n 
                         - self.Ubar[1], self.Ubar_test[1]) * self.ds(tag)

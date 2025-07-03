@@ -49,6 +49,8 @@ from .VariationalFormulation.Euler import CompressibleEuler
 from .VariationalFormulation.NavierStokes import CompressibleNavierStokes
 
 from .utils.MyExpression import MyConstant
+from .utils.holo_utils import *
 
 from .Solve.Solve import Solve
+from .Solve.VF_informed_Solve import JAXFLUIDS_HYDRA_SOLVE
 print("Loading Hydra base on dolfinx version " + __version__)

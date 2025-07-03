@@ -90,9 +90,7 @@ class Solve:
         ----------
         **kwargs : dict Additional configuration parameters
         """
-        # Initialisation du problème
         self.t = 0
-        
         # Configuration de l'export des résultats
         self.setup_export(dictionnaire)
         
@@ -122,7 +120,7 @@ class Solve:
             dictionnaire.get("output", {}),
             dictionnaire.get("csv_output", {})
         )
-        self.export_results(self.t)
+        self.export_results(0)
         
     def setup_solver(self):
         """
@@ -135,7 +133,7 @@ class Solve:
         Fr = extract_blocks(self.pb.residual)
         J = derivative_block(Fr, self.pb.u_list, self.pb.du_list)
         
-        # Création des formulaires
+        # Création des form
         Fr_form = form(Fr, entity_maps = self.pb.entity_maps)
         J_form = form(J, entity_maps = self.pb.entity_maps)
         
@@ -143,9 +141,6 @@ class Solve:
         petsc_options, structure_type, debug = default_Newton_parameters()
         self.solver = create_newton_solver(structure_type, Fr_form, self.pb.u_list, 
                                            J_form, petsc_options, debug, self.pb.bc_class.bcs)
-    
-        # from dolfiny import snesblockproblem
-        # self.solver = snesblockproblem.SNESBlockProblem(Fr_form, self.pb.u_list, bcs = self.pb.bc_class.bcs, J_form = J_form)
 
     def setup_time_parameters(self, **kwargs):
         """
@@ -161,7 +156,7 @@ class Solve:
         self.dt = kwargs.get("dt")
         self.Tfin = kwargs.get("TFin")
         self.num_time_steps = int(self.Tfin / self.dt)
-        self.load_steps = np.linspace(0, self.Tfin, self.num_time_steps + 1)
+        self.load_steps = np.linspace(self.dt, self.Tfin, self.num_time_steps)
         self.pb.bc_class.set_time_dependant_BCs(self.load_steps)
         
     def setup_dirk_scheme(self, **kwargs):
@@ -250,36 +245,36 @@ class Solve:
         # Configuration de la fréquence d'export
         if compteur_output != 1:
             self.is_compteur = True
-            self.compteur = 0 
-        else:
-            self.is_compteur = False            
+            self.compteur = 0        
         
         # Boucle temporelle principale
+        time_steps = [t for t in self.load_steps if t < self.Tfin]
         with tqdm(total=num_time_steps, desc="Simulation progress", unit="step") as pbar:
-            j = 0
-            while self.t < self.Tfin:
-                # Mise à jour du temps
-                self.update_time(j)
-                
-                # Résolution des étapes DIRK
-                for stage in range(self.num_stages):
-                    if self.num_stages > 1:
-                        print(f"Solving DIRK stage {stage+1}/{self.num_stages} at time {self.stage_times[stage]:.6f}")
-                    self.solve_stage(stage)
-                
-                # Calcul de la solution finale
-                self.compute_final_solution()
-                self.update_fields()
-                
-                # Incrémentation et export
-                j += 1
-                self.handle_output(compteur_output)
+            for current_time in time_steps:
+
+                self._inloop_solve(current_time, compteur_output)
                 pbar.update(1)
         
         # Finalisation
         self.export.csv.close_files()
+        
+    def _inloop_solve(self, t, compteur_output):
+        # Mise à jour du temps
+        self.t = t
+        self.stage_times = [t + self.dirk_params.c[s] * self.dt for s in range(self.num_stages)]
+        
+        # Résolution des étapes DIRK
+        for stage in range(self.num_stages):
+            if self.num_stages > 1:
+                print(f"Solving DIRK stage {stage+1}/{self.num_stages} at time {self.stage_times[stage]:.6f}")
+            self.solve_stage(stage)
+        
+        # Calcul de la solution finale
+        self.compute_final_solution()
+        self.update_fields()
+        self.handle_output(t, compteur_output)
             
-    def handle_output(self, compteur_output):
+    def handle_output(self, t, compteur_output):
         """
         Handle periodic result export.
         
@@ -289,25 +284,13 @@ class Solve:
         ----------
         compteur_output : int Export frequency (number of time steps between exports)
         """
-        if self.is_compteur:
+        if hasattr(self, 'is_compteur'):
             if self.compteur == compteur_output:
-                self.export_results(self.t)
+                self.export_results(t)
                 self.compteur = 0
             self.compteur += 1
         else:
-            self.export_results(self.t)
-            
-    def update_time(self, j):
-        """
-        Update the current time and calculate intermediate stage times.
-        
-        Parameters
-        ----------
-        j : int Current time step index
-        """
-        self.t = self.load_steps[j]
-        # Calcul des temps intermédiaires pour les étapes DIRK
-        self.stage_times = [self.t + self.dirk_params.c[s] * self.dt for s in range(self.num_stages)]
+            self.export_results(t)
     
     def configure_stage_residual(self, stage):
         """

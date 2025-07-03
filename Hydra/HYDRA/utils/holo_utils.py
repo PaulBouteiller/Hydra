@@ -16,17 +16,16 @@ import basix
 from scipy.optimize import nnls
 from basix.ufl import quadrature_element, blocked_element
 
-def create_custom_quadrature_element(degree, equal_weight=True, el_type = "Scalar"):
+def create_custom_quadrature_element(ratio, equal_weight=True, el_type = "Scalar"):
     """ 
     Cette procédure est fondée sur l'article:
      Stable high-order quadrature rules with equidistant points   Daan Huybrechs ∗ ,1
     """ 
     liste = []
-    n_sub_element = (degree + 1)
-    n_points = (degree + 1)**2
-    for i in range(degree + 1):
-        for j in range(degree + 1):
-            liste.append([(i + 1./2) * 1 / n_sub_element, (j + 1./2) * 1 / n_sub_element])
+    n_points = ratio**2
+    for i in range(ratio):
+        for j in range(ratio):
+            liste.append([(i + 1./2) * 1 / ratio, (j + 1./2) * 1 / ratio])
     points = np.array(liste)
     
     if equal_weight:
@@ -35,8 +34,8 @@ def create_custom_quadrature_element(degree, equal_weight=True, el_type = "Scala
     else:
         # Poids NNLS optimisés
         monomials = []
-        for i in range(degree + 1):
-            for j in range(degree + 1 - i):
+        for i in range(ratio):
+            for j in range(ratio - i):
                 monomials.append((i, j))
         
         A = np.zeros((len(monomials), n_points))
@@ -52,7 +51,7 @@ def create_custom_quadrature_element(degree, equal_weight=True, el_type = "Scala
         cell="quadrilateral",
         points=points,
         weights=weights,
-        degree = int(degree)
+        degree = int(ratio)-1
     )
     if el_type == "Scalar":
         return element
@@ -60,8 +59,9 @@ def create_custom_quadrature_element(degree, equal_weight=True, el_type = "Scala
         vector_element = blocked_element(element, shape=(2,))
         
         return vector_element
+    
 
-def init_L2_projection_on_V(u, source_term, bcs = []):
+def L2_proj(u, source_term, bcs = []):
     V = u.function_space
     u_trial = ufl.TrialFunction(V)
     v_test = ufl.TestFunction(V)
@@ -73,7 +73,7 @@ def init_L2_projection_on_V(u, source_term, bcs = []):
                                petsc_options = {"ksp_type": "preonly", "pc_type": "lu"})
 
 
-def map_indices(arr1, arr2, rtol=1e-5, atol=1e-8):
+def reordering_mapper(arr1, arr2, rtol=1e-5, atol=1e-8):
     """
     Mappe les indices de arr1 vers arr2 basé sur l'égalité des éléments avec tolérance.
     
@@ -95,6 +95,129 @@ def map_indices(arr1, arr2, rtol=1e-5, atol=1e-8):
     map_list = [np.where([arrays_close(arr1[i], x, rtol, atol) for x in arr2])[0][0] for i in range(len(arr1))]
     return np.array(map_list)
 
-# def quadrature_space_jax_array_to_mapping(Q, jax_array):
-#     quad_array = Q.tabulate_dof_coordinates()
-#     return map_indices(quad_array, np.asarray(jax_array))
+
+def map_indices(arr1, arr2, inactive_axes=None, rtol=1e-5, atol=1e-8):
+    """
+    Mappe chaque point de arr1 vers tous les points correspondants de arr2
+    en ne comparant que les axes actifs.
+    
+    Returns: liste plate des indices de arr2 correspondant à chaque point de arr1
+    """
+    axis_map = {"x": 0, "y": 1, "z": 2}
+    if inactive_axes is None:
+        active_indices = list(range(len(arr1[0])))
+    else:
+        if isinstance(inactive_axes, str):
+            inactive_axes = [inactive_axes]
+        inactive_idx = {axis_map[ax] for ax in inactive_axes if ax in axis_map}
+        active_indices = [i for i in range(len(arr1[0])) if i not in inactive_idx]
+    result = []
+    source_indices = []
+    for i, point1 in enumerate(arr1):
+        coords1 = point1[active_indices]
+        for j, point2 in enumerate(arr2):
+            coords2 = point2[active_indices]
+            if np.allclose(coords1, coords2, rtol=rtol, atol=atol):
+                result.append(j)
+                source_indices.append(i)  # Ajouter cette ligne
+    
+    return np.array(result), np.array(source_indices)
+
+def create_vector_mapping(scalar_mapping, source_indices, dim=2):
+    """
+    Crée les mappings vectoriels à partir du mapping scalaire.
+    
+    Args:
+        scalar_mapping: indices de mapping pour les scalaires
+        source_indices: indices d'origine pour chaque correspondance
+        dim: dimension du vecteur (2 pour 2D, 3 pour 3D)
+    
+    Returns:
+        Dictionnaire avec les mappings pour chaque composante
+    """
+    # Mapping pour v_x: indices * 2
+    vx_hydra_indices = scalar_mapping * 2
+    
+    # Mapping pour v_y: indices * 2 + 1
+    vy_hydra_indices = scalar_mapping * 2 + 1
+    
+    mappings = {
+        'vx': vx_hydra_indices,
+        'vy': vy_hydra_indices,
+        'source_indices': source_indices
+    }
+    
+    if dim == 3:
+        # Pour 3D, on aurait besoin d'une logique différente selon votre organisation
+        # Par exemple: vz_hydra_indices = scalar_mapping * 3 + 2
+        vz_hydra_indices = scalar_mapping * 2 + 2  # Adapter selon votre structure
+        mappings['vz'] = vz_hydra_indices
+    
+    return mappings
+
+def create_averaging_mapper(coords, tol=1e-8):
+    """
+    NB sur np.unique: Returns the sorted unique elements of an array. There are three optional outputs in addition to the unique elements:
+
+    the indices of the input array that give the unique values
+
+    the indices of the unique array that reconstruct the input array
+
+    the number of times each unique value comes up in the input array
+
+    """
+    rounded_coords = np.round(coords / tol) * tol
+    unique_coords, inverse_indices, counts = np.unique(
+        rounded_coords, axis=0, 
+        return_inverse=True, 
+        return_counts=True
+    )
+    return {
+        'unique_coords': unique_coords,
+        'inverse_indices': inverse_indices,
+        'counts': counts
+    }
+
+def apply_averaging(values, mapper):
+    return np.bincount(mapper['inverse_indices'], weights=values) / mapper['counts']
+    
+def project_cell_to_facet(cell_values, a_cell, a_facet, unique_cell_to_unique_facet_mapper, rtol=1e-5, atol=1e-8):
+    """Projette les valeurs cellules vers facettes"""
+    averaged_values = apply_averaging(cell_values, a_cell)
+    reordered_averaged = averaged_values[unique_cell_to_unique_facet_mapper]
+    return reordered_averaged[a_facet['inverse_indices']]
+
+
+def apply_averaging_vector(values, mapper, dim):
+    """Moyennage vectoriel sans reshape"""
+    n_unique = len(mapper['unique_coords'])
+    result = np.zeros(n_unique * dim)
+    for d in range(dim):
+        avg_component = np.bincount(mapper['inverse_indices'], weights=values[d::dim]) / mapper['counts']
+        result[d::dim] = avg_component
+    
+    return result
+
+# def project_cell_to_facet_vector(cell_values, a_cell, a_facet, unique_cell_to_unique_facet_mapper, dim=2):
+#     """Projette les valeurs vectorielles cellules vers facettes"""
+#     print("données d'entrées", len(cell_values))
+#     averaged_values = apply_averaging_vector(cell_values, a_cell, dim)
+#     reordered_averaged = averaged_values[unique_cell_to_unique_facet_mapper]
+#     print("Après réduction", len(reordered_averaged))
+#     a = reordered_averaged[a_facet['inverse_indices']]
+#     print("avant renvoie", len(a))
+#     return a
+
+def project_cell_to_facet_vector(cell_values, a_cell, a_facet, unique_cell_to_unique_facet_mapper, dim=2):
+    """Projette les valeurs vectorielles cellules vers facettes"""
+    print("données d'entrées", len(cell_values))
+    averaged_values = apply_averaging_vector(cell_values, a_cell, dim)
+    reordered_averaged = averaged_values[unique_cell_to_unique_facet_mapper]
+    print("Après réduction", len(reordered_averaged))
+    
+    # Adapter les indices pour le format entrelacé
+    vector_facet_indices = np.repeat(a_facet['inverse_indices'], dim) * dim + np.tile(range(dim), len(a_facet['inverse_indices']))
+    
+    a = reordered_averaged[vector_facet_indices]
+    print("avant renvoie", len(a))
+    return a

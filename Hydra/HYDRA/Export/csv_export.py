@@ -79,32 +79,64 @@ class OptimizedCSVExport:
         and velocity gradient fields based on the user-specified dictionary.
         """
         self.setup_velocity_export()
+        self.setup_boundary_velocity_export()
+        self.setup_rhov_export()
+        self.setup_boundary_rhov_export()
         self.setup_energy_export()
         self.setup_pressure_export()
         self.setup_density_export()
         self.setup_velocity_gradient_export()
+    
             
-    def setup_velocity_export(self):
+    def setup_field_export(self, field_key, field_space_attr):
         """
-        Configure the velocity field export settings.
+        Configure field export settings generically.
         
-        Initializes the necessary data structures and selections for exporting
-        velocity components if requested in the export dictionary.
+        Parameters
+        ----------
+        field_key : str Key in the export dictionary
+        field_space_attr : str Name of the function space attribute
         """
-        if "v" in self.dico_csv:
-            self.csv_export_v = True
-            self.v_dte = self.dofs_to_exp(self.pb.V_v, self.dico_csv.get("v"))
-            self.coordinate_data["v"] = self.get_coordinate_data(self.pb.V_v, self.v_dte)
+        if field_key in self.dico_csv:
+            setattr(self, f"csv_export_{field_key}", True)
+            field_space = getattr(self.pb, field_space_attr)
+            dte = self.dofs_to_exp(field_space, self.dico_csv.get(field_key))
+            setattr(self, f"{field_key}_dte", dte)
+            
+            # Coordinate data
+            self.coordinate_data[field_key] = self.get_coordinate_data(field_space, dte)
+            
+            # Name list et composantes selon la dimension
             if self.dim == 1:
-                self.v_name_list = ["v"]
+                name_list = [field_key]
             elif self.dim == 2:
-                self.v_cte = [self.comp_to_export(self.v_dte, i) for i in range(2)]
-                self.v_name_list = ["u_{x}", "u_{y}"]
+                cte = [self.comp_to_export(dte, i) for i in range(2)]
+                setattr(self, f"{field_key}_cte", cte)
+                name_list = [f"{field_key}_{{x}}", f"{field_key}_{{y}}"]
             elif self.dim == 3:
-                self.v_cte = [self.comp_to_export(self.v_dte, i) for i in range(3)]
-                self.v_name_list = ["v_{x}", "v_{y}", "v_{z}"]
+                cte = [self.comp_to_export(dte, i) for i in range(3)]
+                setattr(self, f"{field_key}_cte", cte)
+                name_list = [f"{field_key}_{{x}}", f"{field_key}_{{y}}", f"{field_key}_{{z}}"]
+            
+            setattr(self, f"{field_key}_name_list", name_list)
         else:
-            self.csv_export_v = False            
+            setattr(self, f"csv_export_{field_key}", False)
+
+    def setup_velocity_export(self):
+        """Configure the velocity field export settings."""
+        self.setup_field_export("v", "V_v")
+    
+    def setup_boundary_velocity_export(self):
+        """Configure the boundary velocity field export settings."""
+        self.setup_field_export("vbar", "V_vbar")
+        
+    def setup_rhov_export(self):
+        """Configure the velocity field export settings."""
+        self.setup_field_export("rhov", "V_rhov")
+    
+    def setup_boundary_rhov_export(self):
+        """Configure the boundary velocity field export settings."""
+        self.setup_field_export("rhovbar", "V_rhovbar")
 
     def setup_energy_export(self):
         """
@@ -271,6 +303,12 @@ class OptimizedCSVExport:
             return
         if self.csv_export_v:
             self.export_field(t, "v", self.pb.U_base[1], self.v_cte, subfield_name = self.v_name_list)
+        if self.csv_export_vbar:
+            self.export_field(t, "vbar", self.pb.Ubar_base[1], self.vbar_cte, subfield_name = self.vbar_name_list)
+        if self.csv_export_rhov:
+            self.export_field(t, "rhov", self.pb.U[1], self.rhov_cte, subfield_name = self.rhov_name_list)
+        if self.csv_export_rhovbar:
+            self.export_field(t, "rhovbar", self.pb.Ubar[1], self.rhovbar_cte, subfield_name = self.rhovbar_name_list)
         if self.csv_export_P:
             self.pb.p_func.interpolate(self.pb.p_expr)
             self.export_field(t, "Pressure", self.pb.p_func, self.p_dte)
@@ -425,6 +463,12 @@ class OptimizedCSVExport:
                 self.post_process_csv(field_name, subfield_name = self.u_name_list)
             elif field_name == "v":
                 self.post_process_csv(field_name, subfield_name = self.v_name_list)
+            elif field_name == "vbar":
+                self.post_process_csv(field_name, subfield_name = self.vbar_name_list)
+            elif field_name == "rhov":
+                self.post_process_csv(field_name, subfield_name = self.rhov_name_list)
+            elif field_name == "rhovbar":
+                self.post_process_csv(field_name, subfield_name = self.rhovbar_name_list)
 
 
     def post_process_csv(self, field_name, subfield_name = None):

@@ -11,11 +11,7 @@ from jaxfluids.data_types import JaxFluidsBuffers
 from jaxfluids.data_types.information import (WallClockTimes)
 import numpy as np
 from HYDRA.utils.holo_utils import (map_indices, create_custom_quadrature_element, L2_proj, create_vector_mapping,
-                                    create_averaging_mapper, project_cell_to_facet, reordering_mapper)
-
-from pyvista4dolfinx import plot, show, screenshot, set_interactive
-from pyvista4dolfinx import Plotter, reset_plotter 
-
+                                    create_averaging_mapper, project_cell_to_facet, reordering_mapper, project_cell_to_facet_vector)
 import matplotlib.pyplot as plt
 
 from scipy.interpolate import interp1d
@@ -60,8 +56,8 @@ class JAXFLUIDS_HYDRA_SOLVE:
             raise ValueError("JAXFluids mesh and Quadrature points are not matching")
         
         # Mapping from cell dof to facet dof 
-        hydra_cell_coords = HDGProblem.V_rho.tabulate_dof_coordinates()
-        hydra_facet_coords = HDGProblem.V_rhobar.tabulate_dof_coordinates()
+        # hydra_cell_coords = HDGProblem.V_rho.tabulate_dof_coordinates()
+        # hydra_facet_coords = HDGProblem.V_rhobar.tabulate_dof_coordinates()
         
         self.a_cell_mapper = create_averaging_mapper(HDGProblem.V_rho.tabulate_dof_coordinates(), tol=1e-8)
         self.a_facet_mapper = create_averaging_mapper(HDGProblem.V_rhobar.tabulate_dof_coordinates(), tol=1e-8)
@@ -94,6 +90,7 @@ class JAXFLUIDS_HYDRA_SOLVE:
                 self.xbar_coords_reduced.append(dl_rhobar[i][0])
                 mask_rhobar.append(i)
         self.mask_rhobar = np.array(mask_rhobar)
+        self.double_mask = 2* self.mask_rhobar
         a=1
                 
         
@@ -196,9 +193,15 @@ class JAXFLUIDS_HYDRA_SOLVE:
                 self.U_quad[2].x.array[self.jf_to_hydra_mapper] = rhoue[self.multi_index]
                     
                 # print("La norme de la différence avant projection est", norm_difference_interpolants(rho, self.hydra_solver.pb.rho.x.array[::2]))
-                plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rho.x.array[::2], linestyle = "--", label = "hydra")
-                plt.scatter(self.xbar_coords_reduced, self.hydra_solver.pb.rhobar.x.array[self.mask_rhobar], marker = "x", label = "hydrabar")
-                plt.plot(self.jax_coords, rho, label = "jax")
+                # plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rho.x.array[::2], linestyle = "--", label = "hydra")
+                # plt.scatter(self.xbar_coords_reduced, self.hydra_solver.pb.rhobar.x.array[self.double_mask], marker = "x", label = "hydrabar")
+                # plt.plot(self.jax_coords, rho, label = "jax")
+                # plt.legend()
+                # plt.show()
+                
+                plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rhov.x.array[::4], linestyle = "--", label = "hydra")
+                plt.scatter(self.xbar_coords_reduced, self.hydra_solver.pb.rhovbar.x.array[self.double_mask], marker = "x", label = "hydrabar")
+                plt.plot(self.jax_coords, rhoux, label = "jax")
                 plt.legend()
                 plt.show()
                 # plotter = Plotter(shape=(1, 2))
@@ -207,9 +210,9 @@ class JAXFLUIDS_HYDRA_SOLVE:
                 # show()
                 a=1
                 for x in self.proj: x.solve()
-                plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rho.x.array[::2], linestyle = "--", label = "hydra")
-                plt.scatter(self.xbar_coords_reduced, self.hydra_solver.pb.rhobar.x.array[self.mask_rhobar], marker = "x", label = "hydrabar")
-                plt.plot(self.jax_coords, rho, label = "jax")
+                plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rhov.x.array[::4], linestyle = "--", label = "hydra")
+                plt.scatter(self.xbar_coords_reduced, self.hydra_solver.pb.rhovbar.x.array[self.double_mask], marker = "x", label = "hydrabar")
+                plt.plot(self.jax_coords, rhoux, label = "jax")
                 plt.legend()
                 plt.show()
                 # plotter = Plotter(shape=(1, 2))
@@ -222,17 +225,15 @@ class JAXFLUIDS_HYDRA_SOLVE:
                 # plt.legend()
                 # plt.show()
                 self.hydra_solver.pb.rhobar.x.array[:] = project_cell_to_facet(self.hydra_solver.pb.rho.x.array, self.a_cell_mapper, self.a_facet_mapper, self.reordering_unique_coords)
-                self.hydra_solver.pb.rhovbar.x.array[:] = project_cell_to_facet_vector(self.hydra_solver.pb.rhov.x.array, self.a_cell_mapper, self.a_facet_mapper, self.reordering_unique_coords)
-                
-                pb.rhovbar.x.array[:] = project_cell_to_facet_vector(pb.rhov.x.array, a_cell_mapper, a_facet_mapper, vector_mapper)
-                
+                self.hydra_solver.pb.rhovbar.x.array[:] = project_cell_to_facet_vector(self.hydra_solver.pb.rhov.x.array, self.a_cell_mapper, self.a_facet_mapper, self.reordering_unique_coords_vector)
                 self.hydra_solver.pb.rhoebar.x.array[:] = project_cell_to_facet(self.hydra_solver.pb.rhoe.x.array, self.a_cell_mapper, self.a_facet_mapper, self.reordering_unique_coords)
-                plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rho.x.array[::2], linestyle = "--", label = "hydra")
-                plt.scatter(self.xbar_coords_reduced, self.hydra_solver.pb.rhobar.x.array[self.mask_rhobar], marker = "x", label = "hydrabar")
-                plt.plot(self.jax_coords, rho, label = "jax")
+                # plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rho.x.array[::2], linestyle = "--", label = "hydra")
+                
+                plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rhov.x.array[::4], linestyle = "--", label = "hydra")
+                plt.scatter(self.xbar_coords_reduced, self.hydra_solver.pb.rhovbar.x.array[self.double_mask], marker = "x", label = "hydrabar")
+                plt.plot(self.jax_coords, rhoux, label = "jax")
                 plt.legend()
                 plt.show()
-                a=1
                 # self.hydra_solver.solver._x.array)
                 # print("Solution prédite par JAX", rho)
                 # plotter = Plotter(shape=(1, 2))

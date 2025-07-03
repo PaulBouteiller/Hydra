@@ -198,16 +198,6 @@ def apply_averaging_vector(values, mapper, dim):
     
     return result
 
-# def project_cell_to_facet_vector(cell_values, a_cell, a_facet, unique_cell_to_unique_facet_mapper, dim=2):
-#     """Projette les valeurs vectorielles cellules vers facettes"""
-#     print("données d'entrées", len(cell_values))
-#     averaged_values = apply_averaging_vector(cell_values, a_cell, dim)
-#     reordered_averaged = averaged_values[unique_cell_to_unique_facet_mapper]
-#     print("Après réduction", len(reordered_averaged))
-#     a = reordered_averaged[a_facet['inverse_indices']]
-#     print("avant renvoie", len(a))
-#     return a
-
 def project_cell_to_facet_vector(cell_values, a_cell, a_facet, unique_cell_to_unique_facet_mapper, dim=2):
     """Projette les valeurs vectorielles cellules vers facettes"""
     print("données d'entrées", len(cell_values))

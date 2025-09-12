@@ -12,28 +12,6 @@ from jaxfluids.data_types.information import (WallClockTimes)
 import numpy as np
 from HYDRA.utils.holo_utils import (map_indices, create_custom_quadrature_element, L2_proj, create_vector_mapping,
                                     create_averaging_mapper, project_cell_to_facet, reordering_mapper, project_cell_to_facet_vector)
-import matplotlib.pyplot as plt
-
-from scipy.interpolate import interp1d
-from scipy.integrate import quad
-
-def norm_difference_interpolants(vec1, vec2):
-    """Calcule la norme de la différence entre deux courbes interpolantes"""
-    
-    # Créer les interpolations sur [0,1]
-    x1 = np.linspace(0, 1, len(vec1))
-    x2 = np.linspace(0, 1, len(vec2))
-    
-    f1 = interp1d(x1, vec1, kind='linear', fill_value='extrapolate')
-    f2 = interp1d(x2, vec2, kind='linear', fill_value='extrapolate')
-    
-    # Fonction différence
-    def diff(t):
-        return f1(t) - f2(t)
-
-    norm_sq, _ = quad(lambda t: diff(t)**2, 0, 1)
-    return np.sqrt(norm_sq)
-
 
 class JAXFLUIDS_HYDRA_SOLVE:
     def __init__(self, HDGProblem, input_manager, dictionnaire_solve, **kwargs):
@@ -44,21 +22,20 @@ class JAXFLUIDS_HYDRA_SOLVE:
         ratio = 3
         quad_element = create_custom_quadrature_element(ratio, equal_weight= False)
         vec_quad_element = create_custom_quadrature_element(ratio, equal_weight= False, el_type = "Vector")
+        
         V_rho_quad = functionspace(HDGProblem.mesh, quad_element)
         V_rhou_quad = functionspace(HDGProblem.mesh, vec_quad_element)
         
         hydra_coords = V_rho_quad.tabulate_dof_coordinates()
         jax_coords = self.set_coordinate_array(self.jaxfluids_solver.domain_information.get_local_cell_centers())
+        
         #Mapping from Jax to Hydra
         self.jf_to_hydra_mapper, self.multi_index = map_indices(jax_coords, hydra_coords, self.jaxfluids_solver.domain_information.inactive_axes)
         self.jf_to_hydra_vector_mapper = create_vector_mapping(self.jf_to_hydra_mapper, self.multi_index, dim = self.hydra_dim)
         if self.multi_index.shape == (0,):
             raise ValueError("JAXFluids mesh and Quadrature points are not matching")
         
-        # Mapping from cell dof to facet dof 
-        # hydra_cell_coords = HDGProblem.V_rho.tabulate_dof_coordinates()
-        # hydra_facet_coords = HDGProblem.V_rhobar.tabulate_dof_coordinates()
-        
+        # Mapping from cell dof to facet dof        
         self.a_cell_mapper = create_averaging_mapper(HDGProblem.V_rho.tabulate_dof_coordinates(), tol=1e-8)
         self.a_facet_mapper = create_averaging_mapper(HDGProblem.V_rhobar.tabulate_dof_coordinates(), tol=1e-8)
         self.reordering_unique_coords = reordering_mapper(self.a_cell_mapper['unique_coords'], 
@@ -70,30 +47,7 @@ class JAXFLUIDS_HYDRA_SOLVE:
         self.U_quad = [Function(V_rho_quad), Function(V_rhou_quad), Function(V_rho_quad)]
         self.proj = [L2_proj(u, u_quad) for u, u_quad in 
                      zip([HDGProblem.rho, HDGProblem.rhov, HDGProblem.rhoe], self.U_quad)]
-        
-        self.temp_func = [Function(HDGProblem.V_rho), Function(HDGProblem.V_rhov), Function(HDGProblem.V_rhoe)]
-        self.temp_funcbar = [Function(HDGProblem.V_rhobar), Function(HDGProblem.V_rhovbar), Function(HDGProblem.V_rhoebar)]
-        self.temp_proj = [L2_proj(u, u_quad) for u, u_quad in 
-                          zip([self.temp_func[0], self.temp_func[1], self.temp_func[2]], self.U_quad)]
-        
-        
-        
-        #Coordonnées pour le debug
-        self.x_hydra_coords = HDGProblem.V_rho.tabulate_dof_coordinates().flatten()[::6]
-        # self.xbar_hydra_coords = .flatten()[::3]
-        dl_rhobar = HDGProblem.V_rhobar.tabulate_dof_coordinates()
-        self.jax_coords = jax_coords.flatten()[::3]
-        mask_rhobar = []
-        self.xbar_coords_reduced = []
-        for i in range(len(dl_rhobar)):
-            if dl_rhobar[i][1]<1e-10:
-                self.xbar_coords_reduced.append(dl_rhobar[i][0])
-                mask_rhobar.append(i)
-        self.mask_rhobar = np.array(mask_rhobar)
-        self.double_mask = 2* self.mask_rhobar
-        a=1
-                
-        
+
     def set_coordinate_array(self, cell_centers):
             x_coords = cell_centers[0].squeeze()
             y_coords = cell_centers[1].squeeze() 
@@ -191,77 +145,15 @@ class JAXFLUIDS_HYDRA_SOLVE:
                 self.U_quad[1].x.array[self.jf_to_hydra_vector_mapper["vx"]]= rhoux[self.multi_index]
                 self.U_quad[1].x.array[self.jf_to_hydra_vector_mapper["vy"]] = rhouy[self.multi_index]
                 self.U_quad[2].x.array[self.jf_to_hydra_mapper] = rhoue[self.multi_index]
-                    
-                # print("La norme de la différence avant projection est", norm_difference_interpolants(rho, self.hydra_solver.pb.rho.x.array[::2]))
-                # plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rho.x.array[::2], linestyle = "--", label = "hydra")
-                # plt.scatter(self.xbar_coords_reduced, self.hydra_solver.pb.rhobar.x.array[self.double_mask], marker = "x", label = "hydrabar")
-                # plt.plot(self.jax_coords, rho, label = "jax")
-                # plt.legend()
-                # plt.show()
                 
-                plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rhov.x.array[::4], linestyle = "--", label = "hydra")
-                plt.scatter(self.xbar_coords_reduced, self.hydra_solver.pb.rhovbar.x.array[self.double_mask], marker = "x", label = "hydrabar")
-                plt.plot(self.jax_coords, rhoux, label = "jax")
-                plt.legend()
-                plt.show()
-                # plotter = Plotter(shape=(1, 2))
-                # plot(self.hydra_solver.pb.rhobar, plotter=plotter, show_mesh=False, subplot=(0,0))
-                # plot(self.hydra_solver.pb.rho, show_mesh=False, subplot=(0,1))
-                # show()
-                a=1
+                #Projection de la solution Jax et mise à jour des variables de trace
                 for x in self.proj: x.solve()
-                plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rhov.x.array[::4], linestyle = "--", label = "hydra")
-                plt.scatter(self.xbar_coords_reduced, self.hydra_solver.pb.rhovbar.x.array[self.double_mask], marker = "x", label = "hydrabar")
-                plt.plot(self.jax_coords, rhoux, label = "jax")
-                plt.legend()
-                plt.show()
-                # plotter = Plotter(shape=(1, 2))
-                # plot(self.hydra_solver.pb.rhobar, plotter=plotter, show_mesh=False, subplot=(0,0))
-                # plot(self.hydra_solver.pb.rho, show_mesh=False, subplot=(0,1))
-                # show()
-                # print("La norme de la différence après projection est", norm_difference_interpolants(rho, self.hydra_solver.pb.rho.x.array[::2]))
-                # plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rho.x.array[::2], linestyle = "--", label = "hydra")
-                # plt.plot(self.jax_coords, rho, label = "jax")
-                # plt.legend()
-                # plt.show()
                 self.hydra_solver.pb.rhobar.x.array[:] = project_cell_to_facet(self.hydra_solver.pb.rho.x.array, self.a_cell_mapper, self.a_facet_mapper, self.reordering_unique_coords)
                 self.hydra_solver.pb.rhovbar.x.array[:] = project_cell_to_facet_vector(self.hydra_solver.pb.rhov.x.array, self.a_cell_mapper, self.a_facet_mapper, self.reordering_unique_coords_vector)
                 self.hydra_solver.pb.rhoebar.x.array[:] = project_cell_to_facet(self.hydra_solver.pb.rhoe.x.array, self.a_cell_mapper, self.a_facet_mapper, self.reordering_unique_coords)
-                # plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rho.x.array[::2], linestyle = "--", label = "hydra")
-                
-                plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rhov.x.array[::4], linestyle = "--", label = "hydra")
-                plt.scatter(self.xbar_coords_reduced, self.hydra_solver.pb.rhovbar.x.array[self.double_mask], marker = "x", label = "hydrabar")
-                plt.plot(self.jax_coords, rhoux, label = "jax")
-                plt.legend()
-                plt.show()
-                # self.hydra_solver.solver._x.array)
-                # print("Solution prédite par JAX", rho)
-                # plotter = Plotter(shape=(1, 2))
-                # plot(self.hydra_solver.pb.rhobar, plotter=plotter, show_mesh=False, subplot=(0,0))
-                # plot(self.hydra_solver.pb.rho, show_mesh=False, subplot=(0,1))
-                # show()
-    
-                # print("Le vecteur densité vaut", self.hydra_solver.pb.rho.x.array)
                 self.hydra_solver._inloop_solve(physical_simulation_time, 1)
-                # plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rho.x.array[::2], linestyle = "--", label = "hydra")
-                # plt.plot(self.jax_coords, rho, label = "jax")
-                # plt.legend()
-                # plt.show()
-                # print("La norme de la différence après résolution est", norm_difference_interpolants(rho, self.hydra_solver.pb.rho.x.array[::2]))
-                ####Solver simplifié
-                # for i, s in enumerate(self.hydra_solver.pb.s):
-                #     s.x.array[:] = self.hydra_solver.pb.U_n[i].x.array / self.hydra_solver.pb.dt
-                # self.hydra_solver.solver.solve()
-                # self.hydra_solver.update_fields()
-                # print("La norme de la différence après résolution est", norm_difference_interpolants(rho, self.hydra_solver.pb.rho.x.array[::2]))
-                # plt.plot(self.x_hydra_coords, self.hydra_solver.pb.rho.x.array[::2], linestyle = "--", label = "hydra")
-                # plt.plot(self.jax_coords, rho, label = "jax")
-                # plt.legend()
-                # plt.show()
             else:
                 compteur+=1
-            
-            
             
             # NOTE UNPACK JAX FLUIDS BUFFERS
             # print("Le compteur est à", compteur)

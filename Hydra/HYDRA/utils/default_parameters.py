@@ -43,6 +43,12 @@ default_post_processing_parameters() : Default export and visualization settings
     Returns a dictionary with output file formats and naming conventions
 """
 
+def facet_element_type():
+    method = "EDG"
+    if method == "HDG":
+        return "DG"
+    elif method == "EDG":
+        return "CG"
 
 def default_fem_degree():
     """
@@ -86,7 +92,7 @@ def default_Riemann_solver_parameters():
     """
     riemann_solver = {}
     riemann_solver.update({"flux_type": "HLL"})
-    riemann_solver.update({"signal_speed_type" : "davis"})
+    riemann_solver.update({"signal_speed_type" : "einfeldt"})
     return riemann_solver
 
 def default_Newton_parameters():

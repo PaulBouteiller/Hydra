@@ -118,6 +118,7 @@ class DIRKParameters:
             self.embedded_order = 1
             
         elif method == "SDIRK3":
+            raise ValueError("Probablement faux, voir Choc Sod")
             # SDIRK d'ordre 3
             gamma = 0.4358665215084589994160194  # Racine de x³ - 3x² + 3x - 1/2 = 0
             self.A = array([

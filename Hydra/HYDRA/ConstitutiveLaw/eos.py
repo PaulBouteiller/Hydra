@@ -118,7 +118,7 @@ class EOS:
         rho, u, E = extract_primitive_variables(U)
         eos_param = mat.eos
         if mat.eos_type == "U1":
-            mat.celerity
+            c = mat.celerity
         elif mat.eos_type == "GP":
             c = sqrt(eos_param.gamma * (eos_param.gamma - 1) * (E - 1./2 * dot(u, u)))
         else:

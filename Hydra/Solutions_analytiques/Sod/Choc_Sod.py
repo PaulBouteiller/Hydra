@@ -30,14 +30,14 @@ Gaz = Material(rho0, 1, "GP", None, dico_eos, dico_devia)
 #Degré d'interpolation #~Volumes finis si degré 0.
 degree = 1
     
-Nx = int(200 / (degree + 1))
+Nx = int(500 / (degree + 1))
 
 Longueur = 1
 Largeur = 1 / Nx
 
 # Paramètres temporels
-t_end = 0.1  # temps final classique pour Sod
-dt = 1e-3    # pas de temps
+t_end = 0.2  # temps final classique pour Sod
+dt = 2e-2    # pas de temps
 num_time_steps = int(t_end/dt)
 
 msh = create_rectangle(MPI.COMM_WORLD, [(0, 0), (Longueur, Largeur)], [Nx, 1], CellType.quadrilateral)
@@ -99,9 +99,10 @@ dictionnaire_solve = {
     "Prefix" : "SodShockTube",
     "csv_output" : {"rho" : True, "Pressure" : True, "rhov" : True, "rhovbar" : True}
     }
-Solver = Solve(pb, dictionnaire_solve, dirk_method = "BDF1", TFin=t_end, dt=dt)
+# Solver = Solve(pb, dictionnaire_solve, dirk_method = "BDF1", TFin=t_end, dt=dt)
+Solver = Solve(pb, dictionnaire_solve, dirk_method="SDIRK4", TFin=t_end, dt=dt)
 Solver.run_simulation()
-# Solve(pb, dirk_method="SDIRK212", TFin=t_end, dt=dt)
+
 # Solve(pb, dirk_method="SDIRK5", TFin=t_end, dt=dt)
 
 import sod_shock_analytic

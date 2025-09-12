@@ -462,11 +462,9 @@ class BaseNewtonSolver(NewtonSolver):
         tol = 1e-8
         n = 0
         converged = False
-        print("Avant callback l'estimation initiale vaut en norme", self._x.norm())
         
         # Initialiser avec _pre_newton_iteration
         self._pre_newton_iteration(self._x)
-        print("Après callback l'estimation initiale vaut en norme", self._x.norm())
         
         # Obtenir la norme du résidu initial
         self._assemble_residual(self._x, self._b)

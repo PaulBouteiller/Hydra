@@ -277,3 +277,43 @@ def solve(left_state, right_state, geometry, t, gamma=1.4, npts=500,
                 'rho_total': rho_total}
 
     return positions, regions, val_dict
+
+
+
+#Exemple d'utilisation 
+# p_gauche = 1.
+# rho_gauche = 1.
+# p_droite = 0.1
+# rho_droite = 0.125
+# t_end = 0.2
+# gamma = 1.4
+# dustFrac = 0.0  # fraction de poussière (0 = gaz pur)
+# npts = 1000  # nombre de points pour la discrétisation
+# left_state = (p_gauche, rho_gauche, 0)  # état gauche (pression, densité, vitesse)
+# right_state = (p_droite, rho_droite, 0.)  # état droit (pression, densité, vitesse)
+
+# # Calculer la solution
+# positions, regions, values = solve(
+#     left_state=left_state, 
+#     right_state=right_state, 
+#     geometry=(0., 1., 0.5),  # frontières gauche, droite et position du choc
+#     t=t_end, 
+#     gamma=gamma, 
+#     npts=npts, 
+#     dustFrac=dustFrac
+# )
+
+# import matplotlib.pyplot as plt
+# # Tracer les résultats
+# f, axarr = plt.subplots(2, sharex=True)
+
+# axarr[0].plot(values['x'], values['p'], linewidth=1.5, color='b')
+# axarr[0].set_ylabel('pressure')
+# axarr[0].set_ylim(0, 1.1)
+
+# axarr[1].plot(values['x'], values['rho'], linewidth=1.5, color='r')
+# axarr[1].set_ylabel('density')
+# axarr[1].set_ylim(0, 1.1)
+
+# plt.suptitle('Shocktube results at t={0}\ndust fraction = {1}, gamma={2}'
+#               .format(t_end, dustFrac, gamma))

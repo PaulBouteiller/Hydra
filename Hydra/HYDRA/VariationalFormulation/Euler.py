@@ -49,7 +49,7 @@ from numpy import zeros
 from .Problem import Problem, BoundaryConditions
 from ..utils.generic_functions import euler_eigenvalues_2D, max_abs_of_sequence
 from..utils.generic_functions import extract_primitive_variables
-from ..utils.default_parameters import default_Riemann_solver_parameters
+from ..utils.default_parameters import default_Riemann_solver_parameters, facet_element_type
 
 class EulerBoundaryConditions(BoundaryConditions):
     """
@@ -182,14 +182,13 @@ class CompressibleEuler(Problem):
         self.V_rho = functionspace(self.mesh, ("DG", self.deg))
         self.V_rhov = functionspace(self.mesh, ("DG", self.deg, (self.tdim, )))
         self.V_rhoe = functionspace(self.mesh, ("DG", self.deg))
-        
-        # quad_element = quadrature_element(self.mesh.topology.cell_type, degree = self.deg + 1)
-
+    
         # Créer l'espace fonctionnel
-        # V_quad = functionspace(self.mesh, quad_element)
-        self.V_rhobar = functionspace(self.facet_mesh, ("DG", self.deg))
-        self.V_rhovbar = functionspace(self.facet_mesh, ("DG", self.deg, (self.tdim, )))
-        self.V_rhoebar = functionspace(self.facet_mesh, ("DG", self.deg))
+        facet_element = facet_element_type()
+        self.V_rhobar = functionspace(self.facet_mesh, (facet_element, self.deg))
+        self.V_rhovbar = functionspace(self.facet_mesh, (facet_element, self.deg, (self.tdim, )))
+        self.V_rhoebar = functionspace(self.facet_mesh, (facet_element, self.deg))
+           
        
     def set_functions(self):   
         """

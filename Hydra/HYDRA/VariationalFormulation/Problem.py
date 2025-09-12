@@ -360,7 +360,8 @@ class MeshManager:
         
         # Degrés de quadrature
         # quad_deg_facet = (deg + 1) ** (self.tdim - 1)
-        quad_deg_facet = (2 * deg + 1) ** (self.tdim)
+        # quad_deg_facet = (2 * deg + 1) ** (self.tdim)
+        quad_deg_facet = (2 * deg + 1)
         print(f"Nombre de points de Gauss en facette: {quad_deg_facet}")
         quad_deg_volume = (deg + 1) ** self.tdim
         print(f"Nombre de points de Gauss en volume: {quad_deg_volume}")

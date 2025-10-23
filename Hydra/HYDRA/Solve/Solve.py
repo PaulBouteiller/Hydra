@@ -40,7 +40,6 @@ dissipation and are suitable for capturing complex physical phenomena.
 """
 
 from .customNewton import create_newton_solver
-# from .SNESBlock2 import BlockedSNESSolver
 from ufl import extract_blocks
 from ..utils.block import derivative_block
 from ..utils.default_parameters import default_Newton_parameters
@@ -48,7 +47,7 @@ from ..Export.export_result import ExportResults
 from ..utils.dirk_parameters import DIRKParameters
 from tqdm import tqdm
 import numpy as np
-from dolfinx.fem import form, Function
+from dolfinx.fem import form, Function, petsc
 
 class Solve:
     """
@@ -129,18 +128,29 @@ class Solve:
         Sets up the Newton-type solver for the nonlinear systems arising
         at each time step or stage, including residual and Jacobian forms.
         """
+        petsc_options = {"ksp_type": "preonly",
+                 "pc_type": "lu",
+                 "pc_factor_mat_solver_type": "mumps",
+                 "snes_linesearch_type": "bt",
+}
         # Extraction du résidu et du jacobien
         Fr = extract_blocks(self.pb.residual)
         J = derivative_block(Fr, self.pb.u_list, self.pb.du_list)
         
         # Création des form
-        Fr_form = form(Fr, entity_maps = self.pb.entity_maps)
-        J_form = form(J, entity_maps = self.pb.entity_maps)
+        Fr_form = form(Fr, entity_maps = [self.pb.entity_maps])
+        J_form = form(J, entity_maps = [self.pb.entity_maps])
         
         # Configuration des options PETSc
         petsc_options, structure_type, debug = default_Newton_parameters()
-        self.solver = create_newton_solver(structure_type, Fr_form, self.pb.u_list, 
-                                           J_form, petsc_options, debug, self.pb.bc_class.bcs)
+        self.problem_u = petsc.NonlinearProblem(
+            Fr_form, self.pb.u_list, J = J_form, bcs=self.pb.bc_class.bcs, 
+            petsc_options_prefix = "my_nl_problem_", 
+            petsc_options = petsc_options,
+            )
+        
+        # self.solver = create_newton_solver(structure_type, Fr_form, self.pb.u_list, 
+        #                                    J_form, petsc_options, debug, self.pb.bc_class.bcs)
 
     def setup_time_parameters(self, **kwargs):
         """
@@ -378,7 +388,7 @@ class Solve:
         self.configure_stage_residual(stage)
         
         # Résolution du système non-linéaire
-        self.solver.solve()
+        self.problem_u.solve()
         
         # Stockage de la solution
         for i, u in enumerate(self.pb.U):

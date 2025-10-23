@@ -133,8 +133,10 @@ class BoundaryConditions:
             else:
                 raise ValueError("Wrong value type")
                 
-        msh_to_facet_mesh = self.entity_maps[self.facet_mesh]
-        facets = msh_to_facet_mesh[self.facet_tag.indices[self.facet_tag.values == region]]
+        # msh_to_facet_mesh = self.entity_maps[self.facet_mesh]
+        # facets = msh_to_facet_mesh[self.facet_tag.indices[self.facet_tag.values == region]]
+        mesh_facets = self.facet_tag.indices[self.facet_tag.values == region]
+        facets = self.entity_maps.sub_topology_to_topology(mesh_facets, inverse=True)
         
         dofs = locate_dofs_topological(current_space(space, isub), self.fdim, facets)
         self.bcs.append(dirichletbc(bc_value(value), dofs, current_space(space, isub)))
@@ -225,16 +227,10 @@ class MeshManager:
         facet_imap = self.mesh.topology.index_map(self.fdim)
         num_facets = facet_imap.size_local + facet_imap.num_ghosts
         facets = arange(num_facets, dtype=int32)
-        facet_mesh, facet_mesh_to_msh, _, _ = create_submesh(self.mesh, self.fdim, facets)
+        facet_mesh, entity_maps = create_submesh(self.mesh, self.fdim, facets)[:2]
         facet_mesh.topology.create_connectivity(self.fdim, self.fdim)
-        
-        # Créer les mappages d'entités
-        msh_to_facet_mesh = full(num_facets, -1)
-        msh_to_facet_mesh[facet_mesh_to_msh] = arange(len(facet_mesh_to_msh))
-        entity_maps = {facet_mesh: msh_to_facet_mesh}
-        
         return facet_mesh, entity_maps
-    
+
     def mark_boundary(self, flag_list, coord_list, localisation_list, tol=finfo(float).eps):
         """
         Mark boundaries based on geometric criteria.
@@ -298,7 +294,9 @@ class MeshManager:
             for tag in self.flag_list:
                 tagged_facets = self.facet_tag.indices[self.facet_tag.values == tag]
                 # Convertir en indices dans le maillage principal
-                original_facets = array([self.entity_maps[self.facet_mesh][f] for f in tagged_facets])
+                # original_facets = array([self.entity_maps[self.facet_mesh][f] for f in tagged_facets])
+                original_facets = self.entity_maps.sub_topology_to_topology(tagged_facets, False)
+                # original_facets = self.entity_maps.array[tagged_facets]
                 self.facet_to_mesh_tag[tag] = original_facets
         else:
             print("Attention: Aucune facette n'a été marquée pour aucune condition aux limites.")
@@ -355,7 +353,7 @@ class MeshManager:
                 # Utiliser la correspondance précalculée
                 entities = compute_integration_domains(
                     IntegralType.exterior_facet, self.mesh.topology, 
-                    self.facet_to_mesh_tag[tag], self.fdim)
+                    self.facet_to_mesh_tag[tag])
                 facet_integration_entities.append((tag, entities))
         
         # Degrés de quadrature
@@ -523,7 +521,7 @@ class Problem:
         the primary solution variables.
         """
         p_elem = self.EOS.set_eos(self.U, self.material)
-        self.p_expr = Expression(p_elem, self.V_rho.element.interpolation_points())
+        self.p_expr = Expression(p_elem, self.V_rho.element.interpolation_points)
         self.p_func = Function(self.V_rho, name = "Pression")      
     
     def update_bcs(self, num_pas):

@@ -429,7 +429,7 @@ class CompressibleEuler(Problem):
             continuity_residual += sum(inner(f_num, test_func) * self.ds_c(tag) 
                                     for f_num, test_func in zip(flux_num, self.Ubar_test))
         
-        #En gros il faudrait faire ça
+        #En gros il faudrait faire ça mais le dsèint ne serait il pas plus un dS_int ?
         # continuity_residual = -sum(inner(f_num, test_func) * self.ds_int
         #                             for f_num, test_func in zip(flux_num, self.Ubar_test))
         return continuity_residual

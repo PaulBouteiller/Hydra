@@ -44,7 +44,7 @@ default_post_processing_parameters() : Default export and visualization settings
 """
 
 def facet_element_type():
-    method = "EDG"
+    method = "HDG"
     if method == "HDG":
         return "DG"
     elif method == "EDG":
@@ -119,9 +119,8 @@ def default_Newton_parameters():
     solver_u.update({"convergence_criterion" : "incremental"})
     solver_u.update({"maximum_iterations" : 50})
     solver_u.update({"pc_factor_mat_solver_type": "mumps",
-            # Activation de BLR (Block Low-Rank) pour MUMPS
-            "mat_mumps_icntl_35": 1,
-            "mat_mumps_cntl_7": 1e-8  # Tolérance BLR
+                     "mat_mumps_icntl_35": 1,
+                     "mat_mumps_cntl_7": 1e-8  # Tolérance BLR
         })
     structure_type = "block"
     debug = True

@@ -42,15 +42,14 @@ from basix.ufl import element, quadrature_element
 import numpy as np
 from dolfinx import __version__
 
-from .utils.default_parameters import *
 from .utils.generic_functions import plot_mesh
-from .ConstitutiveLaw.material import *
+from .ConstitutiveLaw.material import Material
 from .VariationalFormulation.Euler import CompressibleEuler
 from .VariationalFormulation.NavierStokes import CompressibleNavierStokes
 
 from .utils.MyExpression import MyConstant
-from .utils.holo_utils import *
+# from .utils.holo_utils import *
 
 from .Solve.Solve import Solve
-from .Solve.VF_informed_Solve import JAXFLUIDS_HYDRA_SOLVE
+# from .Solve.VF_informed_Solve import JAXFLUIDS_HYDRA_SOLVE
 print("Loading Hydra base on dolfinx version " + __version__)

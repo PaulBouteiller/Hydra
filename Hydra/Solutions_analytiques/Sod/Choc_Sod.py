@@ -72,13 +72,13 @@ def set_initial_conditions(problem):
     
     # Initialisation de la densité
     rho_expr = conditional(lt(x[0], x_diaphragme), rho_gauche, rho_droite)
-    rho_expression = Expression(rho_expr, problem.V_rho.element.interpolation_points())
+    rho_expression = Expression(rho_expr, problem.V_rho.element.interpolation_points)
     problem.rho.interpolate(rho_expression)
     problem.rho_n.interpolate(rho_expression)
     
     # Initialisation de l'énergie totale
     rhoe_expr = conditional(lt(x[0], x_diaphragme), rhoe_gauche, rhoe_droite)
-    rhoe_expression = Expression(rhoe_expr, problem.V_rhoe.element.interpolation_points())
+    rhoe_expression = Expression(rhoe_expr, problem.V_rhoe.element.interpolation_points)
     problem.rhoe.interpolate(rhoe_expression)
     problem.rhoe_n.interpolate(rhoe_expression)
 
@@ -87,10 +87,10 @@ def set_initial_conditions(problem):
     rho_facet_expr = conditional(lt(x_facet[0], x_diaphragme), rho_gauche, rho_droite)
     rhoe_facet_expr = conditional(lt(x_facet[0], x_diaphragme), rhoe_gauche, rhoe_droite)
     
-    rhobar_expression = Expression(rho_facet_expr, problem.V_rhobar.element.interpolation_points())
+    rhobar_expression = Expression(rho_facet_expr, problem.V_rhobar.element.interpolation_points)
     problem.rhobar.interpolate(rhobar_expression)
     
-    rhoebar_expression = Expression(rhoe_facet_expr, problem.V_rhoebar.element.interpolation_points())
+    rhoebar_expression = Expression(rhoe_facet_expr, problem.V_rhoebar.element.interpolation_points)
     problem.rhoebar.interpolate(rhoebar_expression)
 
 set_initial_conditions(pb)

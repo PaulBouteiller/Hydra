@@ -52,10 +52,11 @@ performance characteristics depending on the problem structure and solver config
 Debug capabilities are provided for troubleshooting nonlinear convergence issues.
 """
 from typing import Callable
-from dolfinx.fem.petsc import (create_matrix_block, create_vector_block,
-                             assemble_matrix_block, assemble_vector_block,
-                             assemble_matrix_nest, assemble_vector_nest, 
-                             apply_lifting_nest, set_bc_nest)
+# from dolfinx.fem.petsc import (create_matrix, create_vector_block,
+#                              assemble_matrix_block, assemble_vector_block,
+#                              assemble_matrix_nest, assemble_vector_nest, 
+#                              apply_lifting_nest, set_bc_nest)
+from dolfinx.fem.petsc import (create_matrix, create_vector, assemble_matrix, assemble_vector)
 from dolfinx.fem import bcs_by_block, extract_function_spaces
 from dolfinx.cpp.la.petsc import scatter_local_vectors
 from dolfinx.cpp.nls.petsc import NewtonSolver
@@ -84,7 +85,7 @@ class BlockMethods:
         -------
         PETSc.Vec Block vector with appropriate structure
         """
-        return create_vector_block(F)
+        return create_vector(F, kind="mpi")
     
     def create_matrix(a):
         """
@@ -99,7 +100,7 @@ class BlockMethods:
         -------
         PETSc.Mat Block matrix with appropriate structure
         """
-        return create_matrix_block(a)
+        return create_matrix(a, kind="mpi")
     
     def assemble_residual(b, F, a, bcs, x, alpha=-1.0):
         """
@@ -119,7 +120,7 @@ class BlockMethods:
         """
         with b.localForm() as b_local:
             b_local.set(0.0)
-        assemble_vector_block(b, F, a, bcs=bcs, x0=x, alpha=alpha)
+        assemble_vector(b, F, a, bcs=bcs, x0=x, alpha=alpha, kind="mpi")
         b.ghostUpdate(InsertMode.INSERT_VALUES, ScatterMode.FORWARD)
     
     def assemble_jacobian(A, a, bcs):
@@ -136,7 +137,7 @@ class BlockMethods:
         bcs : list of DirichletBC Boundary conditions to apply
         """
         A.zeroEntries()
-        assemble_matrix_block(A, a, bcs=bcs)
+        assemble_matrix(A, a, bcs=bcs, kind="mpi")
         A.assemble()
     
     def sync_vector_to_x(x, u):
@@ -177,7 +178,7 @@ class NestMethods:
         -------
         PETSc.Vec Nested vector with appropriate structure
         """
-        return assemble_vector_nest(F)
+        return assemble_vector(F, kind="nest")
     
     def create_matrix(a, bcs=None):
         """
@@ -192,7 +193,7 @@ class NestMethods:
         -------
         PETSc.Mat Nested matrix with appropriate structure
         """
-        mat = assemble_matrix_nest(a, bcs=bcs)
+        mat = assemble_matrix(a, bcs=bcs, kind="nest")
         mat.assemble()
         return mat
     
@@ -218,14 +219,14 @@ class NestMethods:
             with b_sub.localForm() as b_local:
                 b_local.set(0.0)
         
-        assemble_vector_nest(b, F)
-        apply_lifting_nest(b, a, bcs=bcs, x0=x, alpha=alpha)
+        assemble_vector(b, F, kind="nest")
+        apply_lifting(b, a, bcs=bcs, x0=x, alpha=alpha, kind="nest")
         
         for b_sub in b.getNestSubVecs():
             b_sub.ghostUpdate(addv=InsertMode.ADD, mode=ScatterMode.REVERSE)
         
         bcs0 = bcs_by_block(extract_function_spaces(F), bcs)
-        set_bc_nest(b, bcs0)
+        set_bc(b, bcs0, kind="nest")
     
     def assemble_jacobian(A, a, bcs):
         """
@@ -249,7 +250,7 @@ class NestMethods:
                 if sub_mat is not None:
                     sub_mat.zeroEntries()
         
-        assemble_matrix_nest(A, a, bcs=bcs)
+        assemble_matrix(A, a, bcs=bcs, kind="nest")
         A.assemble()
     
     def sync_vector_to_x(x, u):
